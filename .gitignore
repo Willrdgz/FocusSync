@@ -1,0 +1,63 @@
+# Dependencies
+FocusSync/node_modules/
+
+# Expo
+FocusSync/.expo/
+FocusSync/dist/
+FocusSync/web-build/
+FocusSync/expo-env.d.ts
+
+# Native
+FocusSync/.kotlin/
+FocusSync/*.orig.*
+FocusSync/*.jks
+FocusSync/*.p8
+FocusSync/*.p12
+FocusSync/*.key
+FocusSync/*.mobileprovision
+
+# Metro
+FocusSync/.metro-health-check*
+
+# Debug
+FocusSync/npm-debug.*
+FocusSync/yarn-debug.*
+FocusSync/yarn-error.*
+FocusSync/pnpm-debug.log*
+
+# macOS
+.DS_Store
+FocusSync/.DS_Store
+FocusSync/*.pem
+
+# Local env files
+FocusSync/.env
+FocusSync/.env.*
+!FocusSync/.env.example
+
+# TypeScript
+FocusSync/*.tsbuildinfo
+
+# Generated native folders
+FocusSync/ios/
+FocusSync/android/
+
+# Logs
+FocusSync/logs/
+FocusSync/*.log
+
+# Build outputs
+FocusSync/build/
+FocusSync/coverage/
+
+# Editor / IDE
+FocusSync/.vscode/
+FocusSync/.idea/
+
+# OS files
+Thumbs.db
+
+# Markdown files inside FocusSync
+FocusSync/*.md
+!FocusSync/README.md
+!FocusSync/ARQUITECTURA_PROYECTO.md
