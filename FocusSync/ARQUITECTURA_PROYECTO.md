@@ -6,6 +6,11 @@ Fecha: 2026-08-25
 
 FocusSync es un prototipo frontend mobile first construido con Expo y React Native. Su objetivo es simular una app de productividad academica que combina planificacion con IA, sesiones Pomodoro y eventos IoT del celular para reducir distracciones.
 
+Este documento separa dos niveles de lectura:
+
+- Estado actual del repositorio: prototipo navegable con datos simulados.
+- Arquitectura funcional objetivo: comportamiento esperado de la aplicacion final para documentacion, diagramas UML e integracion posterior.
+
 El prototipo permite probar el flujo completo de UI:
 
 - Acceso y registro simulado.
@@ -15,6 +20,47 @@ El prototipo permite probar el flujo completo de UI:
 - Simulacion de interrupcion por giroscopio/acelerometro.
 - Gestor y detalle de planes de estudio.
 - Historial con retroalimentacion analitica.
+
+## Arquitectura Funcional Objetivo
+
+La version funcional de FocusSync debe conservar el flujo visual del prototipo, pero reemplazar las simulaciones por servicios reales. Esta arquitectura objetivo es la base recomendada para los diagramas UML, diagramas de flujo y modelo de datos.
+
+### Servicios principales
+
+- Aplicacion movil: Expo SDK 54 con React Native y Expo Router.
+- Autenticacion: Supabase Auth con correo/contraseña y proveedor Google.
+- Base de datos: PostgreSQL administrado por Supabase.
+- Seguridad de datos: politicas RLS para aislar la informacion por usuario autenticado.
+- IA generativa: Gemini API consumida desde Supabase Edge Functions.
+- Sensores del dispositivo: acelerometro y giroscopio para detectar orientacion/movimiento durante el modo enfoque.
+- Notificaciones o audio local: aviso de finalizacion de bloque y retroalimentacion de sesion.
+
+### Flujo funcional esperado
+
+1. El estudiante se registra o inicia sesion mediante Supabase Auth.
+2. El usuario solicita un plan de estudio desde IA Coach usando lenguaje natural.
+3. La app envia la solicitud a una Supabase Edge Function.
+4. La Edge Function llama a Gemini API y recibe un plan estructurado en bloques.
+5. La app guarda el plan y sus bloques en PostgreSQL asociados al usuario.
+6. El estudiante inicia un bloque de enfoque desde IA Coach o desde el detalle del plan.
+7. El temporizador se ejecuta localmente mientras los sensores monitorean el dispositivo.
+8. Si el dispositivo es levantado durante el bloque, la app pausa el temporizador y registra la distraccion.
+9. Al finalizar la sesion, la app guarda el resumen de tiempo planificado, tiempo real e interrupciones.
+10. El historial consulta las sesiones guardadas y muestra retroalimentacion personalizada generada por IA.
+
+### Entidades recomendadas para diagramas y base de datos
+
+- Usuario: perfil autenticado del estudiante.
+- PlanEstudio: rutina generada por IA y asociada a un usuario.
+- BloqueEstudio: unidad de teoria, practica o descanso dentro de un plan.
+- SesionEnfoque: ejecucion real de un bloque de estudio.
+- Distraccion: evento detectado por sensores durante una sesion.
+- MensajeIA: intercambio entre usuario y asistente en IA Coach.
+- RetroalimentacionIA: consejo generado desde el historial del usuario.
+
+### Diferencia con el prototipo actual
+
+Actualmente el repositorio implementa el flujo visual con datos mock y eventos simulados. Por eso, los diagramas academicos pueden representar la arquitectura funcional objetivo, siempre que el documento indique que Supabase, Gemini, sensores reales y persistencia son integraciones posteriores al prototipo actual.
 
 ## Stack Tecnologico
 
@@ -443,12 +489,18 @@ Los PNG fueron regenerados como imagenes validas para evitar errores de MIME dur
 
 ## Documentacion Existente
 
-- `info.md`: stack tecnico y design system.
-- `especs.md`: especificacion inicial de pantallas y refinamiento IoT.
-- `desc.md`: descripcion UX/UI por figuras del prototipo.
-- `DIAGNOSTICO_REPARACION.md`: historial de reparaciones, migracion SDK 54 y correcciones.
-- `CUMPLIMIENTO_DESC.md`: matriz de cumplimiento contra `desc.md`.
-- `ARQUITECTURA_PROYECTO.md`: este documento.
+En el repositorio actual se encuentran:
+
+- `README.md`: descripcion breve del proyecto FocusSync.
+- `ARQUITECTURA_PROYECTO.md`: este documento de arquitectura.
+- `AGENTS.md` y `CLAUDE.md`: notas auxiliares de trabajo para asistentes de desarrollo.
+
+Documentos de analisis usados durante el proceso, pero no presentes actualmente en el repositorio:
+
+- Especificacion de pantallas y refinamiento IoT.
+- Descripcion UX/UI por figuras del prototipo.
+- Diagnostico de reparacion y migracion a SDK 54.
+- Matriz de cumplimiento contra el prototipo.
 
 ## Comandos de Desarrollo
 
@@ -502,10 +554,13 @@ npx expo export --platform web --clear
 
 ## Estado Actual de Validacion
 
-Ultimas verificaciones esperadas:
+Ultimas verificaciones realizadas:
 
 - TypeScript sin errores.
 - Dependencias Expo alineadas.
+
+Verificaciones pendientes o dependientes del entorno:
+
 - Expo Doctor sin issues.
 - Export web funcional.
 
