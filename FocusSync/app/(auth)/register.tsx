@@ -1,1 +1,1 @@
-export { default } from '@/src/views/auth/RegisterView';
+export { RegisterScreen as default } from '../../features/auth/screens/RegisterScreen';

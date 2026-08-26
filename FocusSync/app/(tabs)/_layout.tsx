@@ -1,37 +1,75 @@
-import { Tabs } from 'expo-router';
 import React from 'react';
+import { Tabs } from 'expo-router';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { colors, spacing, typography, fontWeights } from '../../constants/theme';
 
-import { HapticTab } from '@/components/haptic-tab';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-
-export default function TabLayout() {
+export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: '#6366F1',
-        tabBarInactiveTintColor: '#94A3B8',
-        tabBarStyle: { backgroundColor: '#111827', borderTopColor: '#1E293B' },
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.textMuted,
+        tabBarStyle: {
+          backgroundColor: colors.surface,
+          borderTopWidth: 0,
+          paddingTop: spacing.sm,
+          paddingBottom: spacing.sm,
+          height: 80,
+          ...styles.tabBarShadow,
+        },
+        tabBarLabelStyle: {
+          ...typography.xs,
+          fontWeight: fontWeights.medium,
+        },
         headerShown: false,
-        tabBarButton: HapticTab,
-      }}>
+      }}
+    >
       <Tabs.Screen
-        name="index"
+        name="dashboard"
         options={{
-          title: 'Inicio',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: 'Dashboard',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'home' : 'home-outline'} size={24} color={color} />
+          ),
         }}
       />
       <Tabs.Screen
-        name="coach"
+        name="ia-coach"
         options={{
           title: 'IA Coach',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          tabBarIcon: ({ focused, color }) => (
+            <MaterialCommunityIcons name={focused ? 'robot' : 'robot-outline'} size={24} color={color} />
+          ),
         }}
       />
-      <Tabs.Screen name="focus" options={{ title: 'Enfoque', tabBarIcon: ({ color }) => <IconSymbol size={28} name="timer" color={color} /> }} />
-      <Tabs.Screen name="plans" options={{ title: 'Planes', tabBarIcon: ({ color }) => <IconSymbol size={28} name="book.fill" color={color} /> }} />
-      <Tabs.Screen name="history" options={{ title: 'Historial', tabBarIcon: ({ color }) => <IconSymbol size={28} name="clock.fill" color={color} /> }} />
-      <Tabs.Screen name="plan-detail" options={{ href: null }} />
+      <Tabs.Screen
+        name="focus"
+        options={{
+          title: 'Enfoque',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'timer' : 'timer-outline'} size={24} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="history"
+        options={{
+          title: 'Historial',
+          tabBarIcon: ({ focused, color }) => (
+            <Ionicons name={focused ? 'time' : 'time-outline'} size={24} color={color} />
+          ),
+        }}
+      />
     </Tabs>
   );
 }
+
+const styles = {
+  tabBarShadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+};
