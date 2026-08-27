@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Alert, View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useFocusTimer } from '../../hooks/useFocusTimer';
 import { colors, spacing, borderRadius, typography, fontWeights, shadows } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
@@ -12,10 +12,18 @@ import { SensorBadge } from '../../components/focus/SensorBadge';
 import { InstructionText } from '../../components/focus/InstructionText';
 import { MockIoTButton } from '../../components/focus/MockIoTButton';
 import { Modal } from '../../components/ui/Modal';
+import { cancelFocusSession, createFocusSession, recordDistraction, resumeFocusSession } from '../../services/studyPlans';
 
 const INITIAL_DURATION = 45 * 60;
 
 export default function FocusScreen() {
+  const { planId, blockId, durationMinutes } = useLocalSearchParams<{
+    planId?: string;
+    blockId?: string;
+    durationMinutes?: string;
+  }>();
+  const plannedMinutes = Number(durationMinutes) > 0 ? Number(durationMinutes) : 45;
+  const initialDuration = plannedMinutes * 60;
   const {
     timeRemaining,
     isRunning,
@@ -33,26 +41,75 @@ export default function FocusScreen() {
 
   const [showGiveUpModal, setShowGiveUpModal] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [focusSessionId, setFocusSessionId] = useState<string | null>(null);
+  const [savingSession, setSavingSession] = useState(false);
 
   useEffect(() => {
     if (!sessionStarted) {
-      startTimer(INITIAL_DURATION);
+      startTimer(initialDuration);
       setSessionStarted(true);
+      setSavingSession(true);
+      createFocusSession({
+        planId,
+        blockId,
+        plannedMinutes,
+      })
+        .then(setFocusSessionId)
+        .catch((error) => {
+          Alert.alert('Sesion local activa', error instanceof Error ? error.message : 'No se pudo guardar la sesion.');
+        })
+        .finally(() => setSavingSession(false));
     }
-  }, []);
+  }, [blockId, initialDuration, planId, plannedMinutes, sessionStarted, startTimer]);
 
   const handleGiveUp = () => {
     setShowGiveUpModal(true);
   };
 
-  const confirmGiveUp = () => {
+  const confirmGiveUp = async () => {
+    if (focusSessionId) {
+      try {
+        await cancelFocusSession(focusSessionId, Math.floor((initialDuration - timeRemaining) / 60));
+      } catch (error) {
+        Alert.alert('Sesion local cerrada', error instanceof Error ? error.message : 'No se pudo actualizar la sesion.');
+      }
+    }
+
     stopTimer();
     setShowGiveUpModal(false);
     router.back();
   };
 
-  const handleDistraction = () => {
+  const handleResumeAfterDistraction = async () => {
+    clearDistraction();
+
+    if (!focusSessionId) {
+      return;
+    }
+
+    try {
+      await resumeFocusSession(focusSessionId);
+    } catch (error) {
+      Alert.alert('Sesion reanudada localmente', error instanceof Error ? error.message : 'No se pudo sincronizar la reanudacion.');
+    }
+  };
+
+  const handleDistraction = async () => {
     simulateDistraction();
+
+    if (!focusSessionId) {
+      Alert.alert('Distraccion detectada', 'La sesion se pauso, pero aun no se habia guardado en la base de datos.');
+      return;
+    }
+
+    try {
+      await recordDistraction({
+        sessionId: focusSessionId,
+        elapsedSeconds: initialDuration - timeRemaining,
+      });
+    } catch (error) {
+      Alert.alert('Distraccion local', error instanceof Error ? error.message : 'No se pudo registrar la distraccion.');
+    }
   };
 
   return (
@@ -72,6 +129,9 @@ export default function FocusScreen() {
 
         <InstructionText visible={sensorsActive && isRunning && !isPaused && !distractionDetected} />
 
+        {savingSession && <Text style={styles.syncText}>Guardando sesion en Supabase...</Text>}
+        {focusSessionId && !savingSession && <Text style={styles.syncText}>Sesion sincronizada con Supabase</Text>}
+
         <View style={styles.sensorContainer}>
           <SensorBadge
             active={sensorsActive && isRunning && !distractionDetected}
@@ -86,10 +146,10 @@ export default function FocusScreen() {
             </View>
             <Text style={styles.distractionTitle}>¡Distracción Detectada!</Text>
             <Text style={styles.distractionMessage}>
-              El giroscopio detectó movimiento. El temporizador ha sido pausado de forma automática. Vuelve a colocar el dispositivo boca abajo para reanudar la sesión.
+              El giroscopio detectó movimiento. El temporizador ha sido pausado de forma automática y la distracción se registra para el historial.
             </Text>
             <View style={styles.distractionActions}>
-              <Button title="Reanudar manualmente" onPress={clearDistraction} style={styles.distractionButton} />
+              <Button title="Reanudar manualmente" onPress={handleResumeAfterDistraction} style={styles.distractionButton} />
               <Button title="Terminar sesión" variant="secondary" onPress={confirmGiveUp} style={styles.distractionButton} />
             </View>
           </Card>
@@ -109,7 +169,7 @@ export default function FocusScreen() {
             <Button
               variant="primary"
               title={sessionStarted ? 'Reanudar' : 'Iniciar'}
-              onPress={sessionStarted ? resumeTimer : () => { startTimer(INITIAL_DURATION); setSessionStarted(true); }}
+              onPress={sessionStarted ? resumeTimer : () => { startTimer(initialDuration); setSessionStarted(true); }}
               style={styles.controlButton}
               leftIcon={<Ionicons name={sessionStarted ? 'play-outline' : 'play-sharp'} size={20} color={colors.white} />}
             />
@@ -183,6 +243,11 @@ const styles = StyleSheet.create({
   },
   sensorContainer: {
     paddingHorizontal: spacing.lg,
+  },
+  syncText: {
+    ...typography.sm,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   buttonContainer: {
     width: '100%',

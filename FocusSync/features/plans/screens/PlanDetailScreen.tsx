@@ -1,5 +1,5 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,10 +8,40 @@ import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
 import { mockStudyPlans } from '../../../constants/mockData';
 import { borderRadius, colors, fontWeights, spacing, typography } from '../../../constants/theme';
+import { fetchStudyPlanById } from '../../../services/studyPlans';
+import { StudyPlan } from '../../../types';
+import { getBlockTypeLabel } from '../../../utils/studyPlanFormatters';
 
 export function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const plan = mockStudyPlans.find((item) => item.id === id) ?? mockStudyPlans[0];
+  const [plan, setPlan] = useState<StudyPlan>(mockStudyPlans.find((item) => item.id === id) ?? mockStudyPlans[0]);
+  const [loading, setLoading] = useState(Boolean(id));
+
+  useEffect(() => {
+    if (!id) return;
+
+    let mounted = true;
+
+    fetchStudyPlanById(id)
+      .then((data) => {
+        if (!mounted) return;
+        setPlan(data);
+      })
+      .catch((error) => {
+        if (!mounted) return;
+        Alert.alert('Plan no disponible', error instanceof Error ? error.message : 'No se pudo cargar el plan.');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
+
+  const firstBlock = plan.blocks[0];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -26,7 +56,25 @@ export function PlanDetailScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Badge text={plan.difficulty} variant={plan.difficulty === 'Intermedio' ? 'success' : plan.difficulty === 'Avanzado' ? 'warning' : 'danger'} />
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.loadingText}>Cargando detalle del plan...</Text>
+          </View>
+        )}
+
+        <Badge text={plan.difficultyLabel} variant={plan.difficulty === 'basico' || plan.difficulty === 'intermedio' ? 'success' : plan.difficulty === 'avanzado' ? 'warning' : 'danger'} />
+
+        {plan.description ? (
+          <Card style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>Resumen del plan</Text>
+            <Text style={styles.summaryDescription}>{plan.description}</Text>
+            <View style={styles.summaryMeta}>
+              <Ionicons name="save-outline" size={16} color={colors.success} />
+              <Text style={styles.summaryMetaText}>Plan guardado en tu cuenta</Text>
+            </View>
+          </Card>
+        ) : null}
 
         {plan.blocks.map((block, index) => (
           <Card key={block.id} style={styles.blockCard}>
@@ -36,7 +84,7 @@ export function PlanDetailScreen() {
               </View>
               <View style={styles.blockInfo}>
                 <Text style={styles.blockTitle}>{block.title}</Text>
-                <Text style={styles.blockMeta}>{block.duration} • {block.type}</Text>
+                <Text style={styles.blockMeta}>{block.duration} • {getBlockTypeLabel(block.type)}</Text>
               </View>
             </View>
 
@@ -48,7 +96,11 @@ export function PlanDetailScreen() {
           </Card>
         ))}
 
-        <Button title="Iniciar Bloque 1" onPress={() => router.push('/(tabs)/focus')} />
+        <Button
+          title="Iniciar Bloque 1"
+          onPress={() => router.push(`/(tabs)/focus?planId=${plan.id}&blockId=${firstBlock?.id ?? ''}&durationMinutes=${firstBlock?.durationMinutes ?? 45}` as never)}
+          disabled={!firstBlock}
+        />
       </ScrollView>
     </SafeAreaView>
   );
@@ -71,6 +123,13 @@ const styles = StyleSheet.create({
   title: { ...typography.xl, fontWeight: fontWeights.bold, color: colors.textPrimary },
   subtitle: { ...typography.sm, color: colors.textMuted, marginTop: spacing.xs },
   content: { padding: spacing.lg, gap: spacing.lg },
+  loadingContainer: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  loadingText: { ...typography.sm, color: colors.textMuted },
+  summaryCard: { gap: spacing.sm },
+  summaryTitle: { ...typography.lg, fontWeight: fontWeights.bold, color: colors.textPrimary },
+  summaryDescription: { ...typography.sm, color: colors.textSecondary, lineHeight: 22 },
+  summaryMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  summaryMetaText: { ...typography.sm, color: colors.success, fontWeight: fontWeights.semibold },
   blockCard: { gap: spacing.md },
   blockHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   blockNumber: {

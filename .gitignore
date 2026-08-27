@@ -3,6 +3,7 @@ FocusSync/node_modules/
 
 # Expo
 FocusSync/.expo/
+FocusSync/.npm-cache/
 FocusSync/dist/
 FocusSync/web-build/
 FocusSync/expo-env.d.ts
@@ -31,6 +32,7 @@ FocusSync/.DS_Store
 FocusSync/*.pem
 
 # Local env files
+.env
 FocusSync/.env
 FocusSync/.env.*
 !FocusSync/.env.example

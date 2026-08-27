@@ -13,13 +13,22 @@ Este documento separa dos niveles de lectura:
 
 El prototipo permite probar el flujo completo de UI:
 
-- Acceso y registro simulado.
+- Acceso y registro conectados inicialmente con Supabase Auth para correo/contraseña.
 - Dashboard estadistico.
 - Chat IA simulado para generar planes.
 - Modo enfoque con temporizador.
 - Simulacion de interrupcion por giroscopio/acelerometro.
 - Gestor y detalle de planes de estudio.
 - Historial con retroalimentacion analitica.
+
+Adicionalmente, el repositorio ya incluye la base inicial para integrar Supabase:
+
+- Cliente Supabase configurado para Expo en `lib/supabase.ts`.
+- Variables de entorno documentadas en `.env.example`.
+- Migracion SQL inicial en `supabase/migrations/202608260001_initial_schema.sql`.
+- Modelo de datos con tipos enumerados, RLS, triggers, vista de dashboard y tablas para usuarios, planes, bloques, sesiones, distracciones, mensajes IA y retroalimentacion.
+- Edge Function `generate-study-plan` para conectar IA Coach con Gemini y persistir planes.
+- Servicios frontend para consultar planes, crear sesiones de enfoque y registrar distracciones.
 
 ## Arquitectura Funcional Objetivo
 
@@ -71,6 +80,9 @@ Actualmente el repositorio implementa el flujo visual con datos mock y eventos s
 - TypeScript 5.9.
 - NativeWind 4 configurado para nuevos componentes.
 - Tailwind CSS 3.4.
+- Supabase JS para conexion con Auth, Database y Edge Functions.
+- `expo-sqlite` para persistencia local de sesion en Expo.
+- `react-native-url-polyfill` para compatibilidad de URL en React Native.
 - `@expo-google-fonts/inter` para fuente Inter.
 - `@expo/vector-icons` para iconos existentes.
 - `lucide-react-native` instalado para futura iconografia.
@@ -135,6 +147,14 @@ FocusSync/
     useAuth.tsx
     useFocusTimer.tsx
 
+  lib/
+    supabase.ts
+
+  supabase/
+    README.md
+    migrations/
+      202608260001_initial_schema.sql
+
   types/
     index.ts
 
@@ -192,7 +212,7 @@ Responsabilidades:
 
 `app/(auth)/login.tsx`
 
-Pantalla inicial de acceso. Permite iniciar sesion con correo/contraseña o Google simulado. Al iniciar sesion navega al Dashboard.
+Pantalla inicial de acceso. Permite iniciar sesion con correo/contraseña usando Supabase Auth. El boton de Google queda visible, pero requiere configurar OAuth en Supabase antes de quedar funcional.
 
 `app/(auth)/register.tsx`
 
@@ -200,7 +220,7 @@ Ruta del registro. Exporta `RegisterScreen` desde `features/auth/screens/Registe
 
 `features/auth/screens/RegisterScreen.tsx`
 
-Pantalla de registro simulado. Solicita nombre, correo y contraseña. Al registrarse crea un usuario mock y navega al Dashboard.
+Pantalla de registro. Solicita nombre, correo y contraseña. Al registrarse crea un usuario en Supabase Auth y el trigger `trg_auth_user_created` crea el perfil asociado en `public.profiles`.
 
 ### Tabs principales
 
@@ -241,11 +261,11 @@ Datos usados:
 
 Proposito:
 
-- Simular un chat con IA tipo Gemini.
+- Solicitar planes de estudio a la Edge Function `generate-study-plan`.
 - Mostrar mensaje inicial del usuario.
-- Mostrar respuesta IA con bloques de estudio.
+- Mostrar respuesta IA con bloques de estudio guardados en Supabase.
 - Renderizar el boton `Iniciar Bloque 1` dentro del chat.
-- Permitir enviar mensajes mock.
+- Permitir iniciar el primer bloque generado.
 
 Componentes usados:
 
@@ -262,7 +282,8 @@ Proposito:
 - Ejecutar un temporizador de enfoque.
 - Mostrar instruccion de colocar el celular boca abajo.
 - Mostrar badge de sensores activos.
-- Simular evento IoT de distraccion.
+- Crear una sesion de enfoque en Supabase al iniciar la pantalla.
+- Simular evento IoT de distraccion y registrarlo en Supabase.
 - Permitir pausar, reanudar o terminar la sesion.
 
 Estado de interrupcion:
@@ -272,6 +293,8 @@ Estado de interrupcion:
 - El temporizador cambia a color rojo/opaco.
 - El badge cambia a `Dispositivo levantado`.
 - Se muestra una tarjeta roja con el mensaje de giroscopio.
+- La distraccion se guarda en `public.distractions`.
+- La sesion se actualiza en `public.focus_sessions`.
 - Se muestran botones `Reanudar manualmente` y `Terminar sesión`.
 
 Componentes usados:
@@ -312,7 +335,7 @@ Ruta del gestor de planes. Exporta `PlansScreen`.
 
 Proposito:
 
-- Mostrar biblioteca de planes generados.
+- Mostrar biblioteca de planes generados consultados desde Supabase.
 - Mostrar dificultad.
 - Mostrar tiempo total.
 - Mostrar cantidad de bloques.
@@ -326,7 +349,7 @@ Ruta dinamica para detalle de plan.
 
 Proposito:
 
-- Mostrar detalle de un plan especifico.
+- Mostrar detalle de un plan especifico consultado desde Supabase.
 - Mostrar bloques de teoria, practica o descanso.
 - Mostrar recursos necesarios.
 - Mostrar pasos metodologicos.
@@ -400,14 +423,16 @@ Boton de prueba para simular que el usuario levanto el dispositivo.
 
 `hooks/useAuth.tsx`
 
-Maneja autenticacion simulada:
+Maneja autenticacion real con Supabase Auth para correo/contraseña:
 
 - `login`.
 - `loginWithGoogle`.
 - `register`.
 - `logout`.
+- Lectura de sesion activa.
+- Persistencia de sesion mediante el cliente Supabase configurado.
 
-No hay Supabase real conectado. El comportamiento es mock para prototipo frontend.
+El inicio con Google esta reservado para una configuracion posterior de OAuth en Supabase.
 
 `hooks/useFocusTimer.tsx`
 
@@ -434,6 +459,57 @@ Contiene:
 - Planes de estudio.
 - Bloques de plan con recursos y pasos.
 - Consejo IA.
+
+## Backend Supabase
+
+La base inicial del backend se encuentra en `supabase/`.
+
+### Cliente frontend
+
+`lib/supabase.ts`
+
+Inicializa el cliente de Supabase usando:
+
+- `EXPO_PUBLIC_SUPABASE_URL`.
+- `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
+- `react-native-url-polyfill`.
+- `expo-sqlite/localStorage/install` para persistir sesion en Expo.
+
+### Modelo de base de datos
+
+`supabase/migrations/202608260001_initial_schema.sql`
+
+Define las tablas principales del sistema funcional:
+
+- `profiles`.
+- `study_plans`.
+- `study_blocks`.
+- `focus_sessions`.
+- `distractions`.
+- `ai_messages`.
+- `ai_feedback`.
+
+Tambien incluye:
+
+- Tipos enumerados para proveedor de autenticacion, dificultad, tipo de bloque, estado de sesion, tipo de distraccion y emisor de mensaje.
+- Relaciones con `auth.users`.
+- Validaciones con `check`.
+- Triggers de `updated_at`.
+- Trigger para crear perfil al registrar usuario.
+- Trigger para recalcular `total_blocks` cuando se agregan o eliminan bloques.
+- Politicas RLS por usuario autenticado.
+- Indices para consultas por usuario, plan, sesion y fecha.
+- Vista `dashboard_summary` para resumir tiempo enfocado, sesiones e interrupciones del dia.
+
+### Estado de integracion
+
+Supabase ya esta preparado a nivel de configuracion, dependencias y migracion inicial. La autenticacion por correo/contraseña ya esta conectada desde el frontend. IA Coach ya invoca una Edge Function para generar planes, y las pantallas de planes consultan datos reales desde PostgreSQL. El modo enfoque crea sesiones y registra distracciones simuladas en la base de datos.
+
+Pendiente de configuracion externa:
+
+- Desplegar `generate-study-plan` en Supabase.
+- Guardar `GEMINI_API_KEY` como secreto del proyecto Supabase.
+- Probar el flujo completo con la funcion desplegada.
 
 ## Design System
 
@@ -558,17 +634,27 @@ Ultimas verificaciones realizadas:
 
 - TypeScript sin errores.
 - Dependencias Expo alineadas.
+- Cliente Supabase agregado al proyecto.
+- Migracion inicial de base de datos creada.
+- Autenticacion por correo/contraseña conectada con Supabase Auth.
+- IA Coach conectado a Edge Function `generate-study-plan`.
+- Gestor y detalle de planes conectados a Supabase.
+- Modo Enfoque crea sesiones en `focus_sessions`.
+- Boton mock IoT registra distracciones en `distractions`.
 
 Verificaciones pendientes o dependientes del entorno:
 
 - Expo Doctor sin issues.
 - Export web funcional.
+- Ejecucion local de Supabase con Docker.
+- Aplicacion de migraciones en un proyecto Supabase local o remoto.
 
 ## Pendientes Recomendados
 
 - Mover pantallas existentes de `app/(tabs)` a `features/*/screens` para completar la reestructuracion.
 - Reemplazar progresivamente iconos de `@expo/vector-icons` por `lucide-react-native` si se quiere homogeneidad visual.
 - Convertir pantallas a NativeWind solo si se decide abandonar `StyleSheet`.
-- Integrar Supabase Auth real si el prototipo pasa a fase funcional.
-- Integrar Gemini API real si el chat deja de ser mock.
-- Persistir planes, sesiones e interrupciones en backend real.
+- Configurar OAuth de Google en Supabase.
+- Desplegar Edge Function `generate-study-plan` y configurar `GEMINI_API_KEY`.
+- Conectar historial y dashboard a consultas reales de Supabase.
+- Reemplazar el boton mock IoT por lectura real de acelerometro/giroscopio.

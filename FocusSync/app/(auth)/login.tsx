@@ -8,6 +8,7 @@ import { colors, spacing, borderRadius, typography, fontWeights, shadows } from 
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
 import { Card } from '../../components/ui/Card';
+import { getAuthErrorMessage } from '../../utils/authErrors';
 
 export default function LoginScreen() {
   const { login, loginWithGoogle } = useAuth();
@@ -47,7 +48,7 @@ export default function LoginScreen() {
     try {
       await login(email, password);
     } catch (error) {
-      Alert.alert('Error', 'Credenciales inválidas');
+      Alert.alert('No se pudo iniciar sesión', getAuthErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -58,7 +59,7 @@ export default function LoginScreen() {
     try {
       await loginWithGoogle();
     } catch (error) {
-      Alert.alert('Error', 'No se pudo iniciar sesión con Google');
+      Alert.alert('Google no configurado', getAuthErrorMessage(error));
     } finally {
       setLoading(false);
     }

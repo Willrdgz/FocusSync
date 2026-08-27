@@ -8,6 +8,7 @@ import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
 import { borderRadius, colors, fontWeights, shadows, spacing, typography } from '../../../constants/theme';
 import { useAuth } from '../../../hooks/useAuth';
+import { getAuthErrorMessage } from '../../../utils/authErrors';
 
 export function RegisterScreen() {
   const { register } = useAuth();
@@ -25,8 +26,8 @@ export function RegisterScreen() {
     setLoading(true);
     try {
       await register(email, password, name);
-    } catch {
-      Alert.alert('Error', 'No se pudo crear la cuenta simulada.');
+    } catch (error) {
+      Alert.alert('No se pudo crear la cuenta', getAuthErrorMessage(error));
     } finally {
       setLoading(false);
     }

@@ -7,6 +7,9 @@ export interface User {
   name: string;
 }
 
+export type StudyBlockType = 'teoria' | 'practica' | 'descanso';
+export type PlanDifficulty = 'basico' | 'intermedio' | 'avanzado' | 'dificil';
+
 export interface Session {
   id: string;
   subject: string;
@@ -28,8 +31,10 @@ export interface DailyActivity {
 export interface StudyPlanBlock {
   id: string;
   title: string;
+  description?: string | null;
   duration: string;
-  type: 'theory' | 'practice' | 'break';
+  durationMinutes: number;
+  type: StudyBlockType;
   resources: string[];
   steps: string[];
 }
@@ -37,8 +42,11 @@ export interface StudyPlanBlock {
 export interface StudyPlan {
   id: string;
   title: string;
-  difficulty: 'Intermedio' | 'Avanzado' | 'Difícil';
+  description?: string | null;
+  difficulty: PlanDifficulty;
+  difficultyLabel: string;
   totalTime: string;
+  totalMinutes: number;
   blocks: StudyPlanBlock[];
 }
 
@@ -46,9 +54,13 @@ export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  plan?: StudyPlan;
   action?: {
     label: string;
     screen: string;
+    planId?: string;
+    blockId?: string;
+    durationMinutes?: number;
   };
 }
 

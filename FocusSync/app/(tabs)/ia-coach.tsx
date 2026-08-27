@@ -1,15 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Keyboard, KeyboardAvoidingView, Platform, TouchableOpacity, ScrollView } from 'react-native';
+import { Alert, View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import { colors, spacing, borderRadius, typography, fontWeights, shadows } from '../../constants/theme';
-import { Card } from '../../components/ui/Card';
-import { Button } from '../../components/ui/Button';
+import { colors, spacing, typography, fontWeights } from '../../constants/theme';
 import { MessageList } from '../../components/chat/MessageList';
 import { ChatInput } from '../../components/chat/ChatInput';
 import { mockMessages } from '../../constants/mockData';
 import { ChatMessage } from '../../types';
+import { generateStudyPlan } from '../../services/studyPlans';
 
 export default function IACoachScreen() {
   const [messages, setMessages] = useState<ChatMessage[]>(mockMessages);
@@ -26,7 +25,7 @@ export default function IACoachScreen() {
     scrollToBottom();
   }, [messages]);
 
-  const handleSendMessage = (text: string) => {
+  const handleSendMessage = async (text: string) => {
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -36,24 +35,50 @@ export default function IACoachScreen() {
     setMessages((prev) => [...prev, userMessage]);
     setSending(true);
 
-    setTimeout(() => {
+    try {
+      const response = await generateStudyPlan(text);
+      const firstBlock = response.plan.blocks[0];
       const aiResponse: ChatMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'Entendido. Aquí tienes una propuesta:\n- Bloque 1 (45 min): Repaso de conceptos clave.\n- Descanso (10 min).\n- Bloque 2 (45 min): Ejercicios prácticos.',
-        action: {
-          label: 'Iniciar Bloque 1',
-          screen: 'focus',
-        },
+        content: response.message,
+        plan: response.plan,
+        action: firstBlock
+          ? {
+              label: 'Iniciar Bloque 1',
+              screen: 'focus',
+              planId: response.plan.id,
+              blockId: firstBlock.id,
+              durationMinutes: firstBlock.durationMinutes,
+            }
+          : undefined,
       };
+
       setMessages((prev) => [...prev, aiResponse]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo generar el plan.';
+      Alert.alert('IA Coach no disponible', message);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: `No pude generar el plan ahora. ${message}`,
+        },
+      ]);
+    } finally {
       setSending(false);
-    }, 1500);
+    }
   };
 
   const handleAction = (action: ChatMessage['action']) => {
     if (action?.screen === 'focus') {
-      router.push('/(tabs)/focus');
+      const params = new URLSearchParams();
+      if (action.planId) params.set('planId', action.planId);
+      if (action.blockId) params.set('blockId', action.blockId);
+      if (action.durationMinutes) params.set('durationMinutes', String(action.durationMinutes));
+
+      router.push(`/(tabs)/focus${params.toString() ? `?${params.toString()}` : ''}` as never);
     }
   };
 

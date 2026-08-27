@@ -1,5 +1,5 @@
-import React from 'react';
-import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,14 +8,41 @@ import { Card } from '../../../components/ui/Card';
 import { mockStudyPlans } from '../../../constants/mockData';
 import { borderRadius, colors, fontWeights, spacing, typography } from '../../../constants/theme';
 import { StudyPlan } from '../../../types';
+import { fetchStudyPlans } from '../../../services/studyPlans';
 
 const difficultyVariant = (difficulty: StudyPlan['difficulty']) => {
-  if (difficulty === 'Intermedio') return 'success';
-  if (difficulty === 'Avanzado') return 'warning';
+  if (difficulty === 'basico' || difficulty === 'intermedio') return 'success';
+  if (difficulty === 'avanzado') return 'warning';
   return 'danger';
 };
 
 export function PlansScreen() {
+  const [plans, setPlans] = useState<StudyPlan[]>(mockStudyPlans);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    fetchStudyPlans()
+      .then((data) => {
+        if (!mounted) return;
+        setPlans(data.length ? data : mockStudyPlans);
+      })
+      .catch((error) => {
+        if (!mounted) return;
+        Alert.alert('Planes no disponibles', error instanceof Error ? error.message : 'No se pudieron cargar los planes.');
+        setPlans(mockStudyPlans);
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -29,9 +56,17 @@ export function PlansScreen() {
       </View>
 
       <FlatList
-        data={mockStudyPlans}
+        data={plans}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          loading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.loadingText}>Cargando planes guardados...</Text>
+            </View>
+          ) : null
+        }
         renderItem={({ item }) => (
           <Card style={styles.planCard} onPress={() => router.push(`/plans/${item.id}` as never)}>
             <View style={styles.planHeader}>
@@ -44,7 +79,7 @@ export function PlansScreen() {
               </View>
               <Ionicons name="chevron-forward-outline" size={22} color={colors.textMuted} />
             </View>
-            <Badge text={item.difficulty} variant={difficultyVariant(item.difficulty)} />
+            <Badge text={item.difficultyLabel} variant={difficultyVariant(item.difficulty)} />
           </Card>
         )}
       />
@@ -69,6 +104,8 @@ const styles = StyleSheet.create({
   title: { ...typography['2xl'], fontWeight: fontWeights.bold, color: colors.textPrimary },
   subtitle: { ...typography.sm, color: colors.textMuted, marginTop: spacing.xs },
   list: { padding: spacing.lg, gap: spacing.md },
+  loadingContainer: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  loadingText: { ...typography.sm, color: colors.textMuted },
   planCard: { gap: spacing.md },
   planHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   planIcon: {
