@@ -1,50 +1,89 @@
-# Welcome to your Expo app 👋
+# FocusSync
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Aplicación móvil desarrollada con Expo, React Native y Supabase para planificar sesiones de estudio, generar planes con IA y registrar bloques de enfoque.
 
-## Get started
+## Requisitos
 
-1. Install dependencies
+- Docker Desktop, recomendado para evitar problemas de versiones entre integrantes.
+- Expo Go instalado en el teléfono para probar la app.
+- Proyecto Supabase configurado.
+- Edge Function `generate-study-plan` desplegada en Supabase.
 
-   ```bash
-   npm install
-   ```
+## Variables de entorno
 
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
+Copia el archivo de ejemplo:
 
 ```bash
-npm run reset-project
+cp .env.example .env
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Completa `.env` con los valores de Supabase:
 
-## Learn more
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=tu-publishable-key
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+La API key de Gemini no debe ir en `.env` porque sería pública en la app. Debe guardarse como secreto en Supabase:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+GEMINI_API_KEY=tu-api-key
+```
 
-## Join the community
+## Ejecutar con Docker
 
-Join our community of developers creating universal apps.
+Desde esta carpeta, donde está `package.json`, ejecuta:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+docker compose up --build
+```
+
+Expo se iniciará en modo túnel para facilitar el acceso desde Expo Go aunque cada integrante esté en una red distinta.
+
+Cuando aparezca el código QR:
+
+1. Abre Expo Go en el teléfono.
+2. Escanea el QR.
+3. Inicia sesión o crea una cuenta.
+4. Prueba IA Coach y los planes guardados.
+
+Para detener el contenedor:
+
+```bash
+docker compose down
+```
+
+Si se instalan nuevas dependencias, reconstruye la imagen:
+
+```bash
+docker compose up --build
+```
+
+## Ejecutar sin Docker
+
+```bash
+npm install
+npm run start
+```
+
+## Funcionalidades implementadas
+
+- Autenticación real con Supabase Auth.
+- Navegación protegida por sesión.
+- Dashboard con planes pendientes desde Supabase.
+- IA Coach conectado a Edge Function.
+- Generación de planes de estudio con Gemini.
+- Guardado de planes y bloques en Supabase.
+- Vista de detalle del plan con recursos y pasos.
+- Modo enfoque con registro inicial de sesiones e interrupciones.
+- Configuración inicial de Docker para entorno de desarrollo.
+
+## Nota sobre Supabase y Gemini
+
+La Edge Function se encuentra en:
+
+```txt
+supabase/functions/generate-study-plan/index.ts
+```
+
+Si se edita desde el panel web de Supabase, copia el contenido completo de ese archivo y vuelve a desplegar la función.
