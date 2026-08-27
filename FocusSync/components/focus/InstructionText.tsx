@@ -5,9 +5,10 @@ import { Ionicons } from '@expo/vector-icons';
 
 interface InstructionTextProps {
   visible?: boolean;
+  text?: string;
 }
 
-export const InstructionText = ({ visible = true }: InstructionTextProps) => {
+export const InstructionText = ({ visible = true, text = 'Coloca el celular boca abajo para mantener el temporizador activo' }: InstructionTextProps) => {
   const pulseAnim = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
@@ -42,9 +43,7 @@ export const InstructionText = ({ visible = true }: InstructionTextProps) => {
         <View style={styles.iconWrapper}>
           <Ionicons name="phone-portrait-outline" size={28} color={colors.primary} />
         </View>
-        <Text style={styles.text}>
-          Coloca el celular boca abajo para mantener el temporizador activo
-        </Text>
+        <Text style={styles.text}>{text}</Text>
       </Animated.View>
     </Animated.View>
   );

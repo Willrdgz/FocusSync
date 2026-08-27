@@ -29,7 +29,13 @@
     "plugins": [
       "expo-router",
       "expo-font",
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-sensors",
+        {
+          "motionPermission": "FocusSync necesita detectar la posición del teléfono para controlar las sesiones de enfoque."
+        }
+      ]
     ],
     "scheme": "focussync",
     "newArchEnabled": true,

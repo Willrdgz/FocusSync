@@ -219,9 +219,11 @@ export const createFocusSession = async ({
 export const recordDistraction = async ({
   sessionId,
   elapsedSeconds,
+  sensorPayload,
 }: {
   sessionId: string;
   elapsedSeconds: number;
+  sensorPayload?: Record<string, unknown>;
 }) => {
   const { data: userData, error: userError } = await supabase.auth.getUser();
 
@@ -235,8 +237,9 @@ export const recordDistraction = async ({
     distraction_type: 'dispositivo_levantado',
     description: 'El dispositivo fue levantado durante un bloque de enfoque.',
     sensor_payload: {
-      source: 'mock_iot_button',
+      source: 'expo_sensors',
       elapsed_seconds: elapsedSeconds,
+      ...sensorPayload,
     },
   });
 
