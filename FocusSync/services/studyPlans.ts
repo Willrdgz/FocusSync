@@ -28,6 +28,10 @@ export interface GenerateStudyPlanResponse {
   plan: StudyPlan;
 }
 
+const studyPlanCache = new Map<string, StudyPlan>();
+
+export const getCachedStudyPlan = (id?: string) => (id ? studyPlanCache.get(id) ?? null : null);
+
 const getEdgeFunctionErrorMessage = async (error: unknown) => {
   if (typeof error === 'object' && error !== null && 'context' in error) {
     const context = (error as { context?: unknown }).context;
@@ -146,7 +150,11 @@ export const fetchStudyPlans = async () => {
     throw error;
   }
 
-  return (data ?? []).map((row) => mapStudyPlan(row as StudyPlanRow));
+  const plans = (data ?? []).map((row) => mapStudyPlan(row as StudyPlanRow));
+
+  plans.forEach((plan) => studyPlanCache.set(plan.id, plan));
+
+  return plans;
 };
 
 export const fetchStudyPlanById = async (id: string) => {
@@ -179,7 +187,11 @@ export const fetchStudyPlanById = async (id: string) => {
     throw error;
   }
 
-  return mapStudyPlan(data as StudyPlanRow);
+  const plan = mapStudyPlan(data as StudyPlanRow);
+
+  studyPlanCache.set(plan.id, plan);
+
+  return plan;
 };
 
 export const createFocusSession = async ({

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
 import { Input } from '../../../components/ui/Input';
@@ -11,10 +11,12 @@ import { useAuth } from '../../../hooks/useAuth';
 import { getAuthErrorMessage } from '../../../utils/authErrors';
 
 export function RegisterScreen() {
-  const { register } = useAuth();
+  const { register, loginWithGoogle } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [confirmPasswordError, setConfirmPasswordError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
@@ -22,6 +24,13 @@ export function RegisterScreen() {
       Alert.alert('Datos incompletos', 'Ingresa nombre, correo y una contraseña de al menos 6 caracteres.');
       return;
     }
+
+    if (password !== confirmPassword) {
+      setConfirmPasswordError('Las contraseñas no coinciden');
+      return;
+    }
+
+    setConfirmPasswordError('');
 
     setLoading(true);
     try {
@@ -33,13 +42,24 @@ export function RegisterScreen() {
     }
   };
 
+  const handleGoogleRegister = async () => {
+    setLoading(true);
+    try {
+      await loginWithGoogle();
+    } catch (error) {
+      Alert.alert('Google no configurado', getAuthErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.logoContainer}>
             <View style={styles.logo}>
-              <Ionicons name="person-add-outline" size={44} color={colors.primary} />
+              <MaterialCommunityIcons name="brain" size={48} color={colors.primary} />
             </View>
             <Text style={styles.appName}>Crear cuenta</Text>
             <Text style={styles.tagline}>Vincula tus planes y registros a tu perfil personal.</Text>
@@ -49,7 +69,27 @@ export function RegisterScreen() {
             <Input label="Nombre" placeholder="Tu nombre" value={name} onChangeText={setName} autoComplete="name" />
             <Input label="Correo electrónico" placeholder="tu@email.com" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
             <Input label="Contraseña" placeholder="••••••••" value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" />
-            <Button title="Registrarme" loading={loading} onPress={handleRegister} fullWidth />
+            <Input
+              label="Confirmar contraseña"
+              placeholder="••••••••"
+              value={confirmPassword}
+              onChangeText={(text) => {
+                setConfirmPassword(text);
+                if (confirmPasswordError) setConfirmPasswordError('');
+              }}
+              error={confirmPasswordError}
+              secureTextEntry
+              autoComplete="new-password"
+            />
+            <Button title="Crear cuenta" loading={loading} onPress={handleRegister} fullWidth />
+            <Button
+              title="Registrarse con Google"
+              variant="google"
+              loading={loading}
+              onPress={handleGoogleRegister}
+              fullWidth
+              leftIcon={<FontAwesome name="google" size={20} color="#4285F4" />}
+            />
           </Card>
 
           <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={styles.loginLink}>

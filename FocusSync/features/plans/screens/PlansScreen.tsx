@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Badge } from '../../../components/ui/Badge';
 import { Card } from '../../../components/ui/Card';
-import { mockStudyPlans } from '../../../constants/mockData';
 import { borderRadius, colors, fontWeights, spacing, typography } from '../../../constants/theme';
 import { StudyPlan } from '../../../types';
 import { fetchStudyPlans } from '../../../services/studyPlans';
@@ -17,21 +16,25 @@ const difficultyVariant = (difficulty: StudyPlan['difficulty']) => {
 };
 
 export function PlansScreen() {
-  const [plans, setPlans] = useState<StudyPlan[]>(mockStudyPlans);
+  const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
+    setLoading(true);
+    setError(null);
+
     fetchStudyPlans()
       .then((data) => {
         if (!mounted) return;
-        setPlans(data.length ? data : mockStudyPlans);
+        setPlans(data);
       })
       .catch((error) => {
         if (!mounted) return;
-        Alert.alert('Planes no disponibles', error instanceof Error ? error.message : 'No se pudieron cargar los planes.');
-        setPlans(mockStudyPlans);
+        setPlans([]);
+        setError(error instanceof Error ? error.message : 'No se pudieron cargar los planes.');
       })
       .finally(() => {
         if (!mounted) return;
@@ -59,13 +62,25 @@ export function PlansScreen() {
         data={plans}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
-        ListHeaderComponent={
+        ListEmptyComponent={
           loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator color={colors.primary} />
               <Text style={styles.loadingText}>Cargando planes guardados...</Text>
             </View>
-          ) : null
+          ) : error ? (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="alert-circle-outline" size={32} color={colors.danger} />
+              <Text style={styles.emptyTitle}>No pudimos cargar tus planes</Text>
+              <Text style={styles.emptyText}>{error}</Text>
+            </View>
+          ) : (
+            <View style={styles.emptyContainer}>
+              <Ionicons name="calendar-clear-outline" size={32} color={colors.primary} />
+              <Text style={styles.emptyTitle}>Aún no tienes planes</Text>
+              <Text style={styles.emptyText}>Genera uno desde IA Coach y aparecerá aquí.</Text>
+            </View>
+          )
         }
         renderItem={({ item }) => (
           <Card style={styles.planCard} onPress={() => router.push(`/plans/${item.id}` as never)}>
@@ -104,8 +119,11 @@ const styles = StyleSheet.create({
   title: { ...typography['2xl'], fontWeight: fontWeights.bold, color: colors.textPrimary },
   subtitle: { ...typography.sm, color: colors.textMuted, marginTop: spacing.xs },
   list: { padding: spacing.lg, gap: spacing.md },
-  loadingContainer: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
+  loadingContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   loadingText: { ...typography.sm, color: colors.textMuted },
+  emptyContainer: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl, paddingHorizontal: spacing.lg },
+  emptyTitle: { ...typography.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary },
+  emptyText: { ...typography.sm, color: colors.textMuted, textAlign: 'center' },
   planCard: { gap: spacing.md },
   planHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   planIcon: {

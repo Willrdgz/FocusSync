@@ -79,7 +79,7 @@ export interface SessionCardProps {
 export interface ButtonProps {
   title?: string;
   onPress: () => void;
-  variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+  variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'google';
   disabled?: boolean;
   loading?: boolean;
   style?: StyleProp<ViewStyle>;
