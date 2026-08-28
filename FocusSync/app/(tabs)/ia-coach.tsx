@@ -1,18 +1,35 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Alert, View, Text, StyleSheet, KeyboardAvoidingView, Platform, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { colors, spacing, typography, fontWeights } from '../../constants/theme';
 import { MessageList } from '../../components/chat/MessageList';
 import { ChatInput } from '../../components/chat/ChatInput';
-import { mockMessages } from '../../constants/mockData';
 import { ChatMessage } from '../../types';
 import { generateStudyPlan } from '../../services/studyPlans';
+import { useAuth } from '../../hooks/useAuth';
+
+const getTimeGreeting = () => {
+  const hour = new Date().getHours();
+
+  if (hour < 12) return 'Buenos días';
+  if (hour < 19) return 'Buenas tardes';
+  return 'Buenas noches';
+};
 
 export default function IACoachScreen() {
-  const [messages, setMessages] = useState<ChatMessage[]>(mockMessages);
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [
+    {
+      id: 'welcome',
+      role: 'assistant',
+      content: `${getTimeGreeting()}, ${user?.name?.trim().split(' ')[0] || 'Oscar'}. ¿Qué deseas implementar hoy?`,
+    },
+  ]);
   const [sending, setSending] = useState(false);
+  const tabBarHeight = useBottomTabBarHeight();
   const messageListRef = useRef<ScrollView>(null);
 
   const scrollToBottom = () => {
@@ -23,7 +40,7 @@ export default function IACoachScreen() {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, sending]);
 
   const handleSendMessage = async (text: string) => {
     const userMessage: ChatMessage = {
@@ -103,6 +120,7 @@ export default function IACoachScreen() {
           <MessageList
             ref={messageListRef}
             messages={messages}
+            loading={sending}
             onAction={handleAction}
             style={styles.messageList}
             contentContainerStyle={styles.messageListContent}
@@ -111,7 +129,7 @@ export default function IACoachScreen() {
           <ChatInput
             onSend={handleSendMessage}
             disabled={sending}
-            style={styles.chatInput}
+            style={[styles.chatInput, { paddingBottom: Math.max(spacing.md, tabBarHeight - spacing.xl) }]}
           />
         </View>
       </KeyboardAvoidingView>
