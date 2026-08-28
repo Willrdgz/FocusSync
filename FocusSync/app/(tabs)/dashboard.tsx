@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ActivityIndicator, View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { ActivityIndicator, Alert, View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -9,7 +9,6 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { MetricCard } from '../../components/ui/MetricCard';
-import { ProgressRing } from '../../components/ui/ProgressRing';
 import { mockDashboardMetrics } from '../../constants/mockData';
 import { fetchStudyPlans } from '../../services/studyPlans';
 import { StudyPlan } from '../../types';
@@ -22,6 +21,7 @@ const difficultyVariant = (difficulty: StudyPlan['difficulty']) => {
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
+  const distractionCount = mockDashboardMetrics.distractions.split(' ')[0];
   const [plans, setPlans] = useState<StudyPlan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [plansError, setPlansError] = useState<string | null>(null);
@@ -72,6 +72,17 @@ export default function DashboardScreen() {
     router.push(`/(tabs)/focus?${params.toString()}` as never);
   };
 
+  const handleLogout = () => {
+    Alert.alert(
+      'Cerrar sesión',
+      '¿Seguro que quieres cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cerrar sesión', style: 'destructive', onPress: () => { void logout(); } },
+      ],
+    );
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -79,54 +90,51 @@ export default function DashboardScreen() {
           <Text style={styles.greetingText}>Hola, {user?.name || 'Estudiante'}</Text>
           <Text style={styles.greetingSubtext}>¿Qué vamos a aprender hoy?</Text>
         </View>
-        <TouchableOpacity onPress={logout} style={styles.logoutButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="log-out-outline" size={24} color={colors.textSecondary} />
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+          <Text style={styles.logoutText}>Salir</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.metricsGrid}>
           <MetricCard
-            label="Tiempo enfocado hoy"
+            label="Tiempo enfocado"
             value={mockDashboardMetrics.focusedTime}
             icon="timer-outline"
             color={colors.primary}
+            style={styles.metricCard}
           />
           <MetricCard
-            label="Distracciones detectadas"
-            value={mockDashboardMetrics.distractions}
+            label="Interrupciones"
+            value={distractionCount}
             icon="alert-circle-outline"
             color={colors.danger}
+            style={styles.metricCard}
           />
           <MetricCard
             label="Racha actual"
             value={mockDashboardMetrics.streak}
             icon="flame-outline"
             color={colors.warning}
-          />
-          <MetricCard
-            label="Meta diaria"
-            value={`${mockDashboardMetrics.dailyGoal}%`}
-            icon="flag-outline"
-            color={colors.success}
+            style={styles.metricCard}
           />
         </View>
 
         <Card style={styles.progressCard}>
           <View style={styles.progressHeader}>
-            <Text style={styles.progressTitle}>Progreso de la meta diaria</Text>
+            <View style={styles.progressTitleGroup}>
+              <View style={styles.progressIcon}>
+                <Ionicons name="flag-outline" size={18} color={colors.primary} />
+              </View>
+              <Text style={styles.progressTitle}>Progreso diario</Text>
+            </View>
             <Text style={styles.progressPercent}>{mockDashboardMetrics.dailyGoal}%</Text>
           </View>
-          <ProgressRing
-            progress={mockDashboardMetrics.dailyGoal / 100}
-            size={140}
-            strokeWidth={10}
-            color={colors.primary}
-          >
-            <View style={styles.progressCenter}>
-              <Text style={styles.progressCenterText}>Completado</Text>
-            </View>
-          </ProgressRing>
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${mockDashboardMetrics.dailyGoal}%` }]} />
+          </View>
+          <Text style={styles.progressCaption}>Meta diaria alcanzada</Text>
         </Card>
 
         <Card style={styles.timelineCard}>
@@ -143,7 +151,7 @@ export default function DashboardScreen() {
               <Text style={styles.emptyText}>Cargando planes guardados...</Text>
             </View>
           ) : plans.length ? (
-            plans.slice(0, 4).map((plan, index) => {
+            plans.slice(0, 3).map((plan, index) => {
               const firstBlock = plan.blocks[0];
 
               return (
@@ -225,7 +233,20 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   logoutButton: {
-    padding: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.danger + '20',
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  logoutText: {
+    ...typography.sm,
+    fontWeight: fontWeights.semibold,
+    color: colors.danger,
   },
   scrollView: {
     flex: 1,
@@ -237,38 +258,62 @@ const styles = StyleSheet.create({
   },
   metricsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  metricCard: {
+    flexBasis: 0,
+    minWidth: 0,
+    padding: spacing.sm,
+    borderLeftWidth: 3,
   },
   progressCard: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.lg,
   },
   progressHeader: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
-    maxWidth: 280,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  progressTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  progressIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   progressTitle: {
-    ...typography.lg,
+    ...typography.md,
     fontWeight: fontWeights.semibold,
     color: colors.textPrimary,
   },
   progressPercent: {
-    ...typography['2xl'],
+    ...typography.xl,
     fontWeight: fontWeights.bold,
     color: colors.primary,
   },
-  progressCenter: {
-    alignItems: 'center',
+  progressTrack: {
+    height: 12,
+    width: '100%',
+    overflow: 'hidden',
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surfaceHover,
   },
-  progressCenterText: {
+  progressFill: {
+    height: '100%',
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary,
+  },
+  progressCaption: {
     ...typography.sm,
     color: colors.textMuted,
+    marginTop: spacing.sm,
   },
   timelineCard: {
     gap: spacing.md,

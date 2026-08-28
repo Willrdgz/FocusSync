@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import { FontAwesome, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { colors, spacing, borderRadius, typography, fontWeights, shadows } from '../../constants/theme';
@@ -80,7 +80,7 @@ export default function LoginScreen() {
         >
           <View style={styles.logoContainer}>
             <View style={styles.logo}>
-              <Ionicons name="timer-outline" size={48} color={colors.primary} />
+              <MaterialCommunityIcons name="brain" size={48} color={colors.primary} />
             </View>
             <Text style={styles.appName}>FocusSync</Text>
             <Text style={styles.tagline}>Concéntrate físicamente. Aprende inteligentemente.</Text>
@@ -135,13 +135,13 @@ export default function LoginScreen() {
 
             <Button
               title="Continuar con Google"
-              variant="secondary"
+              variant="google"
               loading={loading}
               onPress={handleGoogleLogin}
               style={styles.googleButton}
               fullWidth
               leftIcon={
-                <FontAwesome name="google" size={20} color={colors.textPrimary} />
+                <FontAwesome name="google" size={20} color="#4285F4" />
               }
             />
           </Card>
