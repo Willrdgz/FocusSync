@@ -1,11 +1,13 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { colors, spacing, borderRadius, typography, fontWeights, shadows } from '../../constants/theme';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { mockSessions, mockAIFeedback } from '../../constants/mockData';
+import { mockAIFeedback } from '../../constants/mockData';
+import { fetchFocusSessions } from '../../lib/service';
 import { Session } from '../../types';
 
 interface SessionCardProps {
@@ -41,6 +43,31 @@ const SessionCard = ({ session }: SessionCardProps) => (
 );
 
 export default function HistoryScreen() {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+      setLoading(true);
+
+      fetchFocusSessions()
+        .then((data) => {
+          if (active) setSessions(data);
+        })
+        .catch(() => {
+          if (active) setSessions([]);
+        })
+        .finally(() => {
+          if (active) setLoading(false);
+        });
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
   const renderItem = ({ item }: { item: Session }) => (
     <TouchableOpacity style={styles.listItem} activeOpacity={0.9}>
       <SessionCard session={item} />
@@ -54,20 +81,26 @@ export default function HistoryScreen() {
         <Text style={styles.headerSubtitle}>Tus sesiones de estudio</Text>
       </View>
 
-      <FlatList
-        data={mockSessions}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.listContent}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.emptyState}>
-            <Ionicons name="time-outline" size={48} color={colors.textMuted} />
-            <Text style={styles.emptyText}>No hay sesiones aún</Text>
-            <Text style={styles.emptySubtext}>Completa tu primera sesión en Enfoque</Text>
-          </View>
-        }
-      />
+      {loading ? (
+        <View style={styles.loadingState}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={sessions}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.emptyState}>
+              <Ionicons name="time-outline" size={48} color={colors.textMuted} />
+              <Text style={styles.emptyText}>No hay sesiones aún</Text>
+              <Text style={styles.emptySubtext}>Completa tu primera sesión en Enfoque</Text>
+            </View>
+          }
+        />
+      )}
 
       <View style={styles.aiFeedbackContainer}>
         <Card style={styles.aiFeedbackCard}>
@@ -111,6 +144,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     gap: spacing.md,
     paddingBottom: spacing.xxl,
+  },
+  loadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   listItem: {
     width: '100%',

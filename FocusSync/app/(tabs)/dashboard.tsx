@@ -1,18 +1,68 @@
-import React from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { colors, spacing, borderRadius, typography, fontWeights, shadows } from '../../constants/theme';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { MetricCard } from '../../components/ui/MetricCard';
 import { ProgressRing } from '../../components/ui/ProgressRing';
-import { mockDailyActivities, mockDashboardMetrics, mockNextSession } from '../../constants/mockData';
+import { mockDailyActivities, mockNextSession } from '../../constants/mockData';
+import { fetchDashboardSummary, fetchFocusSessions, formatMinutes, DashboardSummary } from '../../lib/service';
+import { Session } from '../../types';
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      let active = true;
+
+      (async () => {
+        const [resolvedSummary, fetchedSessions] = await Promise.all([
+          fetchDashboardSummary(),
+          fetchFocusSessions().catch(() => [] as Session[]),
+        ]);
+        if (!active) return;
+        setSummary(resolvedSummary);
+        setSessions(fetchedSessions);
+      })();
+
+      return () => {
+        active = false;
+      };
+    }, [])
+  );
+
+  const metrics = useMemo(() => {
+    if (!summary) {
+      return { focusedTime: '0m', distractions: '0 interrupciones', streak: '0 días', dailyGoal: 0 };
+    }
+
+    const dailyGoal = Math.min(
+      100,
+      Math.round((summary.focusedMinutesToday / Math.max(1, summary.dailyGoalMinutes)) * 100)
+    );
+
+    return {
+      focusedTime: formatMinutes(summary.focusedMinutesToday),
+      distractions: summary.distractionsToday === 1 ? '1 interrupción' : `${summary.distractionsToday} interrupciones`,
+      streak: summary.currentStreak === 1 ? '1 día' : `${summary.currentStreak} días`,
+      dailyGoal,
+    };
+  }, [summary]);
+
+  const nextSession = useMemo(() => {
+    const last = sessions[0];
+    if (last) {
+      return { subject: last.subject, duration: `${last.actualDuration ?? last.completed} min` };
+    }
+    return mockNextSession;
+  }, [sessions]);
 
   const handleStartSession = () => {
     router.push('/(tabs)/focus');
@@ -34,25 +84,25 @@ export default function DashboardScreen() {
         <View style={styles.metricsGrid}>
           <MetricCard
             label="Tiempo enfocado hoy"
-            value={mockDashboardMetrics.focusedTime}
+            value={metrics.focusedTime}
             icon="timer-outline"
             color={colors.primary}
           />
           <MetricCard
             label="Distracciones detectadas"
-            value={mockDashboardMetrics.distractions}
+            value={metrics.distractions}
             icon="alert-circle-outline"
             color={colors.danger}
           />
           <MetricCard
             label="Racha actual"
-            value={mockDashboardMetrics.streak}
+            value={metrics.streak}
             icon="flame-outline"
             color={colors.warning}
           />
           <MetricCard
             label="Meta diaria"
-            value={`${mockDashboardMetrics.dailyGoal}%`}
+            value={`${metrics.dailyGoal}%`}
             icon="flag-outline"
             color={colors.success}
           />
@@ -61,10 +111,10 @@ export default function DashboardScreen() {
         <Card style={styles.progressCard}>
           <View style={styles.progressHeader}>
             <Text style={styles.progressTitle}>Progreso de la meta diaria</Text>
-            <Text style={styles.progressPercent}>{mockDashboardMetrics.dailyGoal}%</Text>
+            <Text style={styles.progressPercent}>{metrics.dailyGoal}%</Text>
           </View>
           <ProgressRing
-            progress={mockDashboardMetrics.dailyGoal / 100}
+            progress={metrics.dailyGoal / 100}
             size={140}
             strokeWidth={10}
             color={colors.primary}
@@ -82,14 +132,14 @@ export default function DashboardScreen() {
             </View>
             <View style={styles.nextSessionInfo}>
               <Text style={styles.nextSessionLabel}>Próxima sesión sugerida</Text>
-              <Text style={styles.nextSessionSubject}>{mockNextSession.subject}</Text>
+              <Text style={styles.nextSessionSubject}>{nextSession.subject}</Text>
             </View>
             <Ionicons name="chevron-forward-outline" size={24} color={colors.textMuted} />
           </View>
           <View style={styles.nextSessionFooter}>
             <View style={styles.nextSessionDuration}>
               <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-              <Text style={styles.nextSessionDurationText}>{mockNextSession.duration}</Text>
+              <Text style={styles.nextSessionDurationText}>{nextSession.duration}</Text>
             </View>
             <Button
               title="Iniciar"

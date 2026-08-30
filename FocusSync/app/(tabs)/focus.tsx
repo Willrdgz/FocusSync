@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useFocusTimer } from '../../hooks/useFocusTimer';
+import { finishFocusSession, insertDistraction, startFocusSession } from '../../lib/service';
 import { colors, spacing, borderRadius, typography, fontWeights, shadows } from '../../constants/theme';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
@@ -16,6 +17,32 @@ import { Modal } from '../../components/ui/Modal';
 const INITIAL_DURATION = 45 * 60;
 
 export default function FocusScreen() {
+  const [showGiveUpModal, setShowGiveUpModal] = useState(false);
+  const [sessionStarted, setSessionStarted] = useState(false);
+  const activeSessionIdRef = useRef<string | null>(null);
+  const sessionEndedRef = useRef(false);
+  const startedAtRef = useRef(0);
+
+  const handleSessionEnd = (
+    info: { plannedDuration: number; completedDuration: number; interruptions: number },
+    status: 'completed' | 'interrupted'
+  ) => {
+    const id = activeSessionIdRef.current;
+    if (!id) return;
+    sessionEndedRef.current = true;
+    finishFocusSession(id, { realMinutes: info.completedDuration, status }).catch(() => {
+      // Si falla la carga no interrumpimos al usuario, la sesión simplemente no se registra
+    });
+  };
+
+  const handleSessionComplete = (info: { plannedDuration: number; completedDuration: number; interruptions: number }) => {
+    handleSessionEnd(info, 'completed');
+  };
+
+  const handleSessionStop = (info: { plannedDuration: number; completedDuration: number; interruptions: number }) => {
+    handleSessionEnd(info, 'interrupted');
+  };
+
   const {
     timeRemaining,
     isRunning,
@@ -29,17 +56,37 @@ export default function FocusScreen() {
     simulateDistraction,
     clearDistraction,
     toggleSensors,
-  } = useFocusTimer();
+  } = useFocusTimer({ onComplete: handleSessionComplete, onStop: handleSessionStop });
 
-  const [showGiveUpModal, setShowGiveUpModal] = useState(false);
-  const [sessionStarted, setSessionStarted] = useState(false);
+  const startNewSession = () => {
+    startTimer(INITIAL_DURATION);
+    startedAtRef.current = Date.now();
+    startFocusSession(Math.round(INITIAL_DURATION / 60))
+      .then(({ id }) => {
+        activeSessionIdRef.current = id;
+      })
+      .catch(() => {
+        activeSessionIdRef.current = null;
+      });
+  };
 
   useEffect(() => {
     if (!sessionStarted) {
-      startTimer(INITIAL_DURATION);
+      startNewSession();
       setSessionStarted(true);
     }
   }, []);
+
+  useEffect(
+    () => () => {
+      const id = activeSessionIdRef.current;
+      if (id && !sessionEndedRef.current) {
+        const elapsedMinutes = Math.max(0, Math.round((Date.now() - startedAtRef.current) / 60000));
+        finishFocusSession(id, { realMinutes: elapsedMinutes, status: 'interrupted' }).catch(() => {});
+      }
+    },
+    []
+  );
 
   const handleGiveUp = () => {
     setShowGiveUpModal(true);
@@ -52,7 +99,12 @@ export default function FocusScreen() {
   };
 
   const handleDistraction = () => {
+    if (!isRunning || isPaused) return;
     simulateDistraction();
+    const id = activeSessionIdRef.current;
+    if (id) {
+      insertDistraction(id, 'dispositivo_levantado').catch(() => {});
+    }
   };
 
   return (
@@ -109,7 +161,7 @@ export default function FocusScreen() {
             <Button
               variant="primary"
               title={sessionStarted ? 'Reanudar' : 'Iniciar'}
-              onPress={sessionStarted ? resumeTimer : () => { startTimer(INITIAL_DURATION); setSessionStarted(true); }}
+              onPress={sessionStarted ? resumeTimer : () => { startNewSession(); setSessionStarted(true); }}
               style={styles.controlButton}
               leftIcon={<Ionicons name={sessionStarted ? 'play-outline' : 'play-sharp'} size={20} color={colors.white} />}
             />
