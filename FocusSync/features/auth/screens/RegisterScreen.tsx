@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,18 +15,28 @@ export function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [formNotice, setFormNotice] = useState<{ message: string; type: 'error' | 'info' } | null>(null);
 
   const handleRegister = async () => {
+    setFormNotice(null);
+
     if (!name.trim() || !email.trim() || password.length < 6) {
-      Alert.alert('Datos incompletos', 'Ingresa nombre, correo y una contraseña de al menos 6 caracteres.');
+      setFormNotice({ message: 'Ingresa nombre, correo y una contraseña de al menos 6 caracteres.', type: 'error' });
       return;
     }
 
     setLoading(true);
     try {
-      await register(email, password, name);
-    } catch {
-      Alert.alert('Error', 'No se pudo crear la cuenta simulada.');
+      const result = await register(email, password, name);
+      if (result.requiresEmailConfirmation) {
+        setFormNotice({
+          message: `Revisa tu correo: te enviamos un enlace de confirmación a ${email}.`,
+          type: 'info',
+        });
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo crear la cuenta.';
+      setFormNotice({ message, type: 'error' });
     } finally {
       setLoading(false);
     }
@@ -49,6 +59,10 @@ export function RegisterScreen() {
             <Input label="Correo electrónico" placeholder="tu@email.com" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" />
             <Input label="Contraseña" placeholder="••••••••" value={password} onChangeText={setPassword} secureTextEntry autoComplete="new-password" />
             <Button title="Registrarme" loading={loading} onPress={handleRegister} fullWidth />
+
+            {formNotice ? (
+              <Text style={formNotice.type === 'error' ? styles.errorText : styles.infoText}>{formNotice.message}</Text>
+            ) : null}
           </Card>
 
           <TouchableOpacity onPress={() => router.replace('/(auth)/login')} style={styles.loginLink}>
@@ -83,6 +97,16 @@ const styles = StyleSheet.create({
   appName: { ...typography['3xl'], fontWeight: fontWeights.bold, color: colors.textPrimary },
   tagline: { ...typography.md, color: colors.textMuted, textAlign: 'center' },
   formCard: { gap: spacing.md, padding: spacing.xl },
+  errorText: {
+    ...typography.md,
+    color: colors.danger,
+    textAlign: 'center',
+  },
+  infoText: {
+    ...typography.md,
+    color: colors.success,
+    textAlign: 'center',
+  },
   loginLink: { alignItems: 'center' },
   footerText: { ...typography.sm, color: colors.textMuted, textAlign: 'center' },
   link: { color: colors.primary, fontWeight: fontWeights.semibold },

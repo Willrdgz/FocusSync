@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, KeyboardAvoidingView, Platform, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons, FontAwesome } from '@expo/vector-icons';
 import { router } from 'expo-router';
@@ -15,6 +15,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [formError, setFormError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const validateEmail = (email: string) => /\S+@\S+\.\S+/.test(email);
@@ -44,10 +45,12 @@ export default function LoginScreen() {
     if (hasError) return;
 
     setLoading(true);
+    setFormError('');
     try {
       await login(email, password);
     } catch (error) {
-      Alert.alert('Error', 'Credenciales inválidas');
+      const message = error instanceof Error ? error.message : 'Credenciales inválidas';
+      setFormError(message);
     } finally {
       setLoading(false);
     }
@@ -55,10 +58,12 @@ export default function LoginScreen() {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
+    setFormError('');
     try {
       await loginWithGoogle();
     } catch (error) {
-      Alert.alert('Error', 'No se pudo iniciar sesión con Google');
+      const message = error instanceof Error ? error.message : 'No se pudo iniciar sesión con Google';
+      setFormError(message);
     } finally {
       setLoading(false);
     }
@@ -125,6 +130,10 @@ export default function LoginScreen() {
               style={styles.primaryButton}
               fullWidth
             />
+
+            {formError ? (
+              <Text style={styles.formError}>{formError}</Text>
+            ) : null}
 
             <View style={styles.divider}>
               <View style={styles.dividerLine} />
@@ -225,6 +234,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   primaryButton: {
+    marginBottom: spacing.lg,
+  },
+  formError: {
+    ...typography.md,
+    color: colors.danger,
+    textAlign: 'center',
     marginBottom: spacing.lg,
   },
   divider: {
