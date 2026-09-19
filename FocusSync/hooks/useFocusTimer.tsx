@@ -5,24 +5,24 @@ interface UseFocusTimerReturn {
   timeRemaining: number;
   isRunning: boolean;
   isPaused: boolean;
-  sensorsActive: boolean;
   distractionDetected: boolean;
+  waitingForFaceDown: boolean;
+  prepareTimer: (duration: number) => void;
   startTimer: (duration: number) => void;
+  activateTimer: () => void;
   pauseTimer: () => void;
   resumeTimer: () => void;
   stopTimer: () => void;
   simulateDistraction: () => void;
   clearDistraction: () => void;
-  toggleSensors: () => void;
 }
 
 export function useFocusTimer(): UseFocusTimerReturn {
   const [timeRemaining, setTimeRemaining] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [sensorsActive, setSensorsActive] = useState(true);
   const [distractionDetected, setDistractionDetected] = useState(false);
-  const [initialDuration, setInitialDuration] = useState(0);
+  const [waitingForFaceDown, setWaitingForFaceDown] = useState(false);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
@@ -46,26 +46,41 @@ export function useFocusTimer(): UseFocusTimerReturn {
     };
   }, [isRunning, isPaused, timeRemaining]);
 
-  const startTimer = useCallback((duration: number) => {
-    setInitialDuration(duration);
+  const prepareTimer = useCallback((duration: number) => {
     setTimeRemaining(duration);
-    setIsRunning(true);
+    setIsRunning(false);
+    setIsPaused(false);
+    setWaitingForFaceDown(false);
+    setDistractionDetected(false);
+  }, []);
+
+  const startTimer = useCallback((duration: number) => {
+    setTimeRemaining((current) => current || duration);
+    setWaitingForFaceDown(true);
     setIsPaused(false);
     setDistractionDetected(false);
   }, []);
 
+  const activateTimer = useCallback(() => {
+    setIsRunning(true);
+    setIsPaused(false);
+    setWaitingForFaceDown(false);
+  }, []);
+
   const pauseTimer = useCallback(() => {
     setIsPaused(true);
+    setWaitingForFaceDown(false);
   }, []);
 
   const resumeTimer = useCallback(() => {
-    setIsPaused(false);
+    setWaitingForFaceDown(true);
   }, []);
 
   const stopTimer = useCallback(() => {
     setIsRunning(false);
     setIsPaused(false);
     setDistractionDetected(false);
+    setWaitingForFaceDown(false);
     setTimeRemaining(0);
   }, []);
 
@@ -73,30 +88,28 @@ export function useFocusTimer(): UseFocusTimerReturn {
     if (isRunning && !isPaused) {
       setIsPaused(true);
       setDistractionDetected(true);
+      setWaitingForFaceDown(false);
     }
   }, [isRunning, isPaused]);
 
   const clearDistraction = useCallback(() => {
     setDistractionDetected(false);
-    setIsPaused(false);
-  }, []);
-
-  const toggleSensors = useCallback(() => {
-    setSensorsActive((prev) => !prev);
+    setWaitingForFaceDown(true);
   }, []);
 
   return {
     timeRemaining,
     isRunning,
     isPaused,
-    sensorsActive,
     distractionDetected,
+    waitingForFaceDown,
+    prepareTimer,
     startTimer,
+    activateTimer,
     pauseTimer,
     resumeTimer,
     stopTimer,
     simulateDistraction,
     clearDistraction,
-    toggleSensors,
   };
 }

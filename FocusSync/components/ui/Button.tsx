@@ -38,7 +38,7 @@ export const Button = React.forwardRef<React.ElementRef<typeof TouchableOpacity>
         ) : (
           <View style={styles.content}>
             {(leftIcon || icon) && <View style={styles.iconWrapper}>{leftIcon || icon}</View>}
-            {title && <Text style={[styles.title, (leftIcon || icon) && styles.titleWithIcon]}>{title}</Text>}
+            {title && <Text style={[styles.title, variant === 'google' && styles.googleTitle, (leftIcon || icon) && styles.titleWithIcon]}>{title}</Text>}
           </View>
         )}
       </TouchableOpacity>
@@ -65,6 +65,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  google: {
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.white,
+  },
   danger: {
     backgroundColor: colors.danger,
   },
@@ -89,6 +94,9 @@ const styles = StyleSheet.create({
   title: {
     fontWeight: fontWeights.semibold,
     color: colors.white,
+  },
+  googleTitle: {
+    color: colors.background,
   },
   titleWithIcon: {},
 });

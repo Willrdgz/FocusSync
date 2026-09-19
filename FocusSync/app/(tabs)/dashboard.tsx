@@ -1,21 +1,86 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { ActivityIndicator, Alert, View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
 import { colors, spacing, borderRadius, typography, fontWeights, shadows } from '../../constants/theme';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
+import { Badge } from '../../components/ui/Badge';
 import { MetricCard } from '../../components/ui/MetricCard';
-import { ProgressRing } from '../../components/ui/ProgressRing';
-import { mockDailyActivities, mockDashboardMetrics, mockNextSession } from '../../constants/mockData';
+import { mockDashboardMetrics } from '../../constants/mockData';
+import { fetchStudyPlans } from '../../services/studyPlans';
+import { StudyPlan } from '../../types';
+
+const difficultyVariant = (difficulty: StudyPlan['difficulty']) => {
+  if (difficulty === 'basico' || difficulty === 'intermedio') return 'success';
+  if (difficulty === 'avanzado') return 'warning';
+  return 'danger';
+};
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
+  const distractionCount = mockDashboardMetrics.distractions.split(' ')[0];
+  const [plans, setPlans] = useState<StudyPlan[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+  const [plansError, setPlansError] = useState<string | null>(null);
 
-  const handleStartSession = () => {
-    router.push('/(tabs)/focus');
+  const loadPlans = useCallback(() => {
+    let active = true;
+
+    setLoadingPlans(true);
+    setPlansError(null);
+
+    fetchStudyPlans()
+      .then((data) => {
+        if (!active) return;
+        setPlans(data);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setPlans([]);
+        setPlansError(error instanceof Error ? error.message : 'No se pudieron cargar los planes.');
+      })
+      .finally(() => {
+        if (!active) return;
+        setLoadingPlans(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useFocusEffect(loadPlans);
+
+  const handleOpenPlan = (planId: string) => {
+    router.push(`/plans/${planId}` as never);
+  };
+
+  const handleStartPlan = (plan: StudyPlan) => {
+    const firstBlock = plan.blocks[0];
+    const params = new URLSearchParams();
+
+    params.set('planId', plan.id);
+
+    if (firstBlock) {
+      params.set('blockId', firstBlock.id);
+      params.set('durationMinutes', String(firstBlock.durationMinutes));
+    }
+
+    router.push(`/(tabs)/focus?${params.toString()}` as never);
+  };
+
+  const handleLogout = () => {
+    Alert.alert(
+      'Cerrar sesión',
+      '¿Seguro que quieres cerrar sesión?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { text: 'Cerrar sesión', style: 'destructive', onPress: () => { void logout(); } },
+      ],
+    );
   };
 
   return (
@@ -25,101 +90,116 @@ export default function DashboardScreen() {
           <Text style={styles.greetingText}>Hola, {user?.name || 'Estudiante'}</Text>
           <Text style={styles.greetingSubtext}>¿Qué vamos a aprender hoy?</Text>
         </View>
-        <TouchableOpacity onPress={logout} style={styles.logoutButton} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Ionicons name="log-out-outline" size={24} color={colors.textSecondary} />
+        <TouchableOpacity onPress={handleLogout} style={styles.logoutButton} activeOpacity={0.8}>
+          <Ionicons name="log-out-outline" size={20} color={colors.danger} />
+          <Text style={styles.logoutText}>Salir</Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.metricsGrid}>
           <MetricCard
-            label="Tiempo enfocado hoy"
+            label="Tiempo enfocado"
             value={mockDashboardMetrics.focusedTime}
             icon="timer-outline"
             color={colors.primary}
+            style={styles.metricCard}
           />
           <MetricCard
-            label="Distracciones detectadas"
-            value={mockDashboardMetrics.distractions}
+            label="Interrupciones"
+            value={distractionCount}
             icon="alert-circle-outline"
             color={colors.danger}
+            style={styles.metricCard}
           />
           <MetricCard
             label="Racha actual"
             value={mockDashboardMetrics.streak}
             icon="flame-outline"
             color={colors.warning}
-          />
-          <MetricCard
-            label="Meta diaria"
-            value={`${mockDashboardMetrics.dailyGoal}%`}
-            icon="flag-outline"
-            color={colors.success}
+            style={styles.metricCard}
           />
         </View>
 
         <Card style={styles.progressCard}>
           <View style={styles.progressHeader}>
-            <Text style={styles.progressTitle}>Progreso de la meta diaria</Text>
+            <View style={styles.progressTitleGroup}>
+              <View style={styles.progressIcon}>
+                <Ionicons name="flag-outline" size={18} color={colors.primary} />
+              </View>
+              <Text style={styles.progressTitle}>Progreso diario</Text>
+            </View>
             <Text style={styles.progressPercent}>{mockDashboardMetrics.dailyGoal}%</Text>
           </View>
-          <ProgressRing
-            progress={mockDashboardMetrics.dailyGoal / 100}
-            size={140}
-            strokeWidth={10}
-            color={colors.primary}
-          >
-            <View style={styles.progressCenter}>
-              <Text style={styles.progressCenterText}>Completado</Text>
-            </View>
-          </ProgressRing>
-        </Card>
-
-        <Card style={styles.nextSessionCard} onPress={handleStartSession}>
-          <View style={styles.nextSessionHeader}>
-            <View style={styles.nextSessionIcon}>
-              <MaterialCommunityIcons name="calendar-clock" size={24} color={colors.primary} />
-            </View>
-            <View style={styles.nextSessionInfo}>
-              <Text style={styles.nextSessionLabel}>Próxima sesión sugerida</Text>
-              <Text style={styles.nextSessionSubject}>{mockNextSession.subject}</Text>
-            </View>
-            <Ionicons name="chevron-forward-outline" size={24} color={colors.textMuted} />
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${mockDashboardMetrics.dailyGoal}%` }]} />
           </View>
-          <View style={styles.nextSessionFooter}>
-            <View style={styles.nextSessionDuration}>
-              <Ionicons name="time-outline" size={16} color={colors.textMuted} />
-              <Text style={styles.nextSessionDurationText}>{mockNextSession.duration}</Text>
-            </View>
-            <Button
-              title="Iniciar"
-              variant="primary"
-              size="sm"
-              onPress={handleStartSession}
-              style={styles.nextSessionButton}
-            />
-          </View>
+          <Text style={styles.progressCaption}>Meta diaria alcanzada</Text>
         </Card>
 
         <Card style={styles.timelineCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Actividades de hoy</Text>
+            <Text style={styles.sectionTitle}>Planes pendientes</Text>
             <TouchableOpacity onPress={() => router.push('/plans' as never)}>
               <Text style={styles.sectionLink}>Ver planes</Text>
             </TouchableOpacity>
           </View>
-          {mockDailyActivities.map((activity) => (
-            <View key={activity.id} style={styles.timelineItem}>
-              <View style={[styles.timelineDot, activity.status === 'completed' && styles.timelineDotCompleted]} />
-              <View style={styles.timelineInfo}>
-                <Text style={styles.timelineTitle}>{activity.title}</Text>
-                <Text style={styles.timelineMeta}>{activity.time} • {activity.duration}</Text>
-              </View>
-              <Text style={styles.timelineStatus}>
-                {activity.status === 'completed' ? 'Completada' : activity.status === 'upcoming' ? 'Próxima' : 'Pendiente'}
-              </Text>
+
+          {loadingPlans ? (
+            <View style={styles.loadingPlansContainer}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.emptyText}>Cargando planes guardados...</Text>
             </View>
-          ))}
+          ) : plans.length ? (
+            plans.slice(0, 3).map((plan, index) => {
+              const firstBlock = plan.blocks[0];
+
+              return (
+                <TouchableOpacity
+                  key={plan.id}
+                  style={styles.planItem}
+                  onPress={() => handleOpenPlan(plan.id)}
+                  activeOpacity={0.85}
+                >
+                  <View style={styles.planPosition}>
+                    <Text style={styles.planPositionText}>{index + 1}</Text>
+                  </View>
+                  <View style={styles.timelineInfo}>
+                    <Text style={styles.timelineTitle}>{plan.title}</Text>
+                    <Text style={styles.timelineMeta}>
+                      {plan.totalTime} • {plan.blocks.length} bloques
+                      {firstBlock ? ` • inicia con ${firstBlock.duration}` : ''}
+                    </Text>
+                    <View style={styles.planFooter}>
+                      <Badge text={plan.difficultyLabel} variant={difficultyVariant(plan.difficulty)} />
+                      <TouchableOpacity
+                        style={styles.startInlineButton}
+                        onPress={() => handleStartPlan(plan)}
+                        activeOpacity={0.85}
+                      >
+                        <Ionicons name="play-outline" size={14} color={colors.white} />
+                        <Text style={styles.startInlineText}>Iniciar</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <Ionicons name="chevron-forward-outline" size={22} color={colors.textMuted} />
+                </TouchableOpacity>
+              );
+            })
+          ) : (
+            <View style={styles.emptyState}>
+              <View style={styles.emptyIcon}>
+                <Ionicons name="calendar-clear-outline" size={28} color={colors.primary} />
+              </View>
+              <Text style={styles.emptyTitle}>No hay nada pendiente</Text>
+              <Text style={styles.emptyText}>
+                Cuando generes un plan desde IA Coach, aparecerá aquí para abrirlo o iniciar su primer bloque.
+              </Text>
+              <Button title="Crear plan con IA" size="sm" onPress={() => router.push('/(tabs)/ia-coach' as never)} />
+            </View>
+          )}
+
+          {plansError ? <Text style={styles.errorText}>{plansError}</Text> : null}
         </Card>
       </ScrollView>
     </SafeAreaView>
@@ -153,7 +233,20 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   logoutButton: {
-    padding: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.danger + '20',
+    borderWidth: 1,
+    borderColor: colors.danger,
+  },
+  logoutText: {
+    ...typography.sm,
+    fontWeight: fontWeights.semibold,
+    color: colors.danger,
   },
   scrollView: {
     flex: 1,
@@ -165,91 +258,62 @@ const styles = StyleSheet.create({
   },
   metricsGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.md,
-    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  metricCard: {
+    flexBasis: 0,
+    minWidth: 0,
+    padding: spacing.sm,
+    borderLeftWidth: 3,
   },
   progressCard: {
-    alignItems: 'center',
-    paddingVertical: spacing.xl,
+    paddingVertical: spacing.lg,
   },
   progressHeader: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    width: '100%',
-    maxWidth: 280,
-    marginBottom: spacing.lg,
-  },
-  progressTitle: {
-    ...typography.lg,
-    fontWeight: fontWeights.semibold,
-    color: colors.textPrimary,
-  },
-  progressPercent: {
-    ...typography['2xl'],
-    fontWeight: fontWeights.bold,
-    color: colors.primary,
-  },
-  progressCenter: {
-    alignItems: 'center',
-  },
-  progressCenterText: {
-    ...typography.sm,
-    color: colors.textMuted,
-  },
-  nextSessionCard: {
-    padding: spacing.md,
-  },
-  nextSessionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
     marginBottom: spacing.md,
   },
-  nextSessionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: borderRadius.lg,
+  progressTitleGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  progressIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.md,
     backgroundColor: colors.primary + '20',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  nextSessionInfo: {
-    flex: 1,
-  },
-  nextSessionLabel: {
-    ...typography.xs,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  nextSessionSubject: {
-    ...typography.lg,
+  progressTitle: {
+    ...typography.md,
     fontWeight: fontWeights.semibold,
     color: colors.textPrimary,
-    marginTop: spacing.xs,
   },
-  nextSessionFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
+  progressPercent: {
+    ...typography.xl,
+    fontWeight: fontWeights.bold,
+    color: colors.primary,
   },
-  nextSessionDuration: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
+  progressTrack: {
+    height: 12,
+    width: '100%',
+    overflow: 'hidden',
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.surfaceHover,
   },
-  nextSessionDurationText: {
-    ...typography.md,
-    fontWeight: fontWeights.medium,
-    color: colors.textSecondary,
+  progressFill: {
+    height: '100%',
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary,
   },
-  nextSessionButton: {
-    minWidth: 100,
+  progressCaption: {
+    ...typography.sm,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
   },
   timelineCard: {
     gap: spacing.md,
@@ -269,20 +333,33 @@ const styles = StyleSheet.create({
     fontWeight: fontWeights.semibold,
     color: colors.primary,
   },
-  timelineItem: {
+  loadingPlansContainer: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.lg,
+  },
+  planItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
     gap: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
   },
-  timelineDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.warning,
+  planPosition: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xs,
   },
-  timelineDotCompleted: {
-    backgroundColor: colors.success,
+  planPositionText: {
+    ...typography.sm,
+    fontWeight: fontWeights.bold,
+    color: colors.primary,
   },
   timelineInfo: {
     flex: 1,
@@ -295,9 +372,55 @@ const styles = StyleSheet.create({
   timelineMeta: {
     ...typography.sm,
     color: colors.textMuted,
+    marginTop: spacing.xs,
   },
-  timelineStatus: {
+  planFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    flexWrap: 'wrap',
+  },
+  startInlineButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary,
+  },
+  startInlineText: {
     ...typography.xs,
-    color: colors.textSecondary,
+    fontWeight: fontWeights.semibold,
+    color: colors.white,
+  },
+  emptyState: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xl,
+  },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.primary + '20',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTitle: {
+    ...typography.lg,
+    fontWeight: fontWeights.bold,
+    color: colors.textPrimary,
+  },
+  emptyText: {
+    ...typography.sm,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+  errorText: {
+    ...typography.xs,
+    color: colors.danger,
+    textAlign: 'center',
   },
 });

@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 
 export function usePlansController() {
   return {
-    openPlan: () => router.push('/(tabs)/plan-detail'),
+    openPlan: (id = 'backend-php-postgresql') => router.push(`/plans/${id}`),
     returnToPlans: () => router.back(),
   };
 }

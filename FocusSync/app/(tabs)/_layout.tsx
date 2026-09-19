@@ -1,9 +1,34 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Redirect, Tabs } from 'expo-router';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors, spacing, typography, fontWeights } from '../../constants/theme';
+import { AuthStateView } from '../../components/auth/AuthStateView';
+import { getAuthErrorMessage } from '../../utils/authErrors';
+import { useAuth } from '../../hooks/useAuth';
 
 export default function TabsLayout() {
+  const { session, loading, authError, clearAuthError } = useAuth();
+
+  if (loading) {
+    return <AuthStateView />;
+  }
+
+  if (authError) {
+    return (
+      <AuthStateView
+        title="No pudimos verificar tu sesión"
+        message={getAuthErrorMessage(new Error(authError))}
+        actionLabel="Volver a intentar"
+        onAction={clearAuthError}
+        loading={false}
+      />
+    );
+  }
+
+  if (!session) {
+    return <Redirect href="/(auth)/login" />;
+  }
+
   return (
     <Tabs
       screenOptions={{

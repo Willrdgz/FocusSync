@@ -1,17 +1,64 @@
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Badge } from '../../../components/ui/Badge';
 import { Button } from '../../../components/ui/Button';
 import { Card } from '../../../components/ui/Card';
-import { mockStudyPlans } from '../../../constants/mockData';
 import { borderRadius, colors, fontWeights, spacing, typography } from '../../../constants/theme';
+import { fetchStudyPlanById, getCachedStudyPlan } from '../../../services/studyPlans';
+import { StudyPlan } from '../../../types';
+import { getBlockTypeLabel } from '../../../utils/studyPlanFormatters';
 
 export function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const plan = mockStudyPlans.find((item) => item.id === id) ?? mockStudyPlans[0];
+  const [plan, setPlan] = useState<StudyPlan | null>(() => getCachedStudyPlan(id));
+  const [loading, setLoading] = useState(() => !getCachedStudyPlan(id));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!id) {
+      setError('No se identificó el plan solicitado.');
+      setLoading(false);
+      return;
+    }
+
+    const cachedPlan = getCachedStudyPlan(id);
+
+    if (cachedPlan) {
+      setPlan(cachedPlan);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
+    let mounted = true;
+
+    setLoading(true);
+    setError(null);
+
+    fetchStudyPlanById(id)
+      .then((data) => {
+        if (!mounted) return;
+        setPlan(data);
+      })
+      .catch((error) => {
+        if (!mounted) return;
+        setPlan(null);
+        setError(error instanceof Error ? error.message : 'No se pudo cargar el plan.');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [id]);
+
+  const firstBlock = plan?.blocks[0];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -20,13 +67,33 @@ export function PlanDetailScreen() {
           <Ionicons name="chevron-back-outline" size={28} color={colors.textPrimary} />
         </TouchableOpacity>
         <View style={styles.headerText}>
-          <Text style={styles.title}>{plan.title}</Text>
-          <Text style={styles.subtitle}>{plan.totalTime} • {plan.blocks.length} bloques</Text>
+          <Text style={styles.title}>{plan?.title ?? (loading ? 'Cargando plan...' : 'Plan no disponible')}</Text>
+          <Text style={styles.subtitle}>
+            {plan ? `${plan.totalTime} • ${plan.blocks.length} bloques` : loading ? 'Cargando información...' : 'Plan no disponible'}
+          </Text>
         </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Badge text={plan.difficulty} variant={plan.difficulty === 'Intermedio' ? 'success' : plan.difficulty === 'Avanzado' ? 'warning' : 'danger'} />
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.loadingText}>Cargando detalle del plan...</Text>
+          </View>
+        ) : plan ? (
+          <>
+        <Badge text={plan.difficultyLabel} variant={plan.difficulty === 'basico' || plan.difficulty === 'intermedio' ? 'success' : plan.difficulty === 'avanzado' ? 'warning' : 'danger'} />
+
+        {plan.description ? (
+          <Card style={styles.summaryCard}>
+            <Text style={styles.summaryTitle}>Resumen del plan</Text>
+            <Text style={styles.summaryDescription}>{plan.description}</Text>
+            <View style={styles.summaryMeta}>
+              <Ionicons name="save-outline" size={16} color={colors.success} />
+              <Text style={styles.summaryMetaText}>Plan guardado en tu cuenta</Text>
+            </View>
+          </Card>
+        ) : null}
 
         {plan.blocks.map((block, index) => (
           <Card key={block.id} style={styles.blockCard}>
@@ -36,7 +103,7 @@ export function PlanDetailScreen() {
               </View>
               <View style={styles.blockInfo}>
                 <Text style={styles.blockTitle}>{block.title}</Text>
-                <Text style={styles.blockMeta}>{block.duration} • {block.type}</Text>
+                <Text style={styles.blockMeta}>{block.duration} • {getBlockTypeLabel(block.type)}</Text>
               </View>
             </View>
 
@@ -48,7 +115,19 @@ export function PlanDetailScreen() {
           </Card>
         ))}
 
-        <Button title="Iniciar Bloque 1" onPress={() => router.push('/(tabs)/focus')} />
+        <Button
+          title="Iniciar Bloque 1"
+          onPress={() => router.push(`/(tabs)/focus?planId=${plan.id}&blockId=${firstBlock?.id ?? ''}&durationMinutes=${firstBlock?.durationMinutes ?? 45}` as never)}
+          disabled={!firstBlock}
+        />
+          </>
+        ) : (
+          <View style={styles.errorContainer}>
+            <Ionicons name="alert-circle-outline" size={36} color={colors.danger} />
+            <Text style={styles.errorTitle}>No pudimos cargar este plan</Text>
+            <Text style={styles.errorText}>{error ?? 'Intenta volver a la lista de planes.'}</Text>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -71,6 +150,16 @@ const styles = StyleSheet.create({
   title: { ...typography.xl, fontWeight: fontWeights.bold, color: colors.textPrimary },
   subtitle: { ...typography.sm, color: colors.textMuted, marginTop: spacing.xs },
   content: { padding: spacing.lg, gap: spacing.lg },
+  loadingContainer: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  loadingText: { ...typography.sm, color: colors.textMuted },
+  errorContainer: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl, paddingHorizontal: spacing.lg },
+  errorTitle: { ...typography.lg, fontWeight: fontWeights.semibold, color: colors.textPrimary },
+  errorText: { ...typography.sm, color: colors.textMuted, textAlign: 'center' },
+  summaryCard: { gap: spacing.sm },
+  summaryTitle: { ...typography.lg, fontWeight: fontWeights.bold, color: colors.textPrimary },
+  summaryDescription: { ...typography.sm, color: colors.textSecondary, lineHeight: 22 },
+  summaryMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  summaryMetaText: { ...typography.sm, color: colors.success, fontWeight: fontWeights.semibold },
   blockCard: { gap: spacing.md },
   blockHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   blockNumber: {
