@@ -35,7 +35,8 @@
         {
           "motionPermission": "FocusSync necesita detectar la posición del teléfono para controlar las sesiones de enfoque."
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "scheme": "focussync",
     "newArchEnabled": true,

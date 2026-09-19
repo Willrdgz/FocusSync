@@ -1,8 +1,19 @@
 import React, { createContext, ReactNode, useContext, useEffect, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
+import * as AuthSession from 'expo-auth-session';
 import { router } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import { User } from '../types';
+
+WebBrowser.maybeCompleteAuthSession();
+
+const REDIRECT_PATH = 'auth/callback';
+const googleRedirectUri = AuthSession.makeRedirectUri({
+  scheme: 'focussync',
+  path: REDIRECT_PATH,
+});
 
 interface AuthContextType {
   user: User | null;
@@ -103,7 +114,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithGoogle = async () => {
-    throw new Error('El inicio con Google requiere configurar OAuth en Supabase.');
+    setLoading(true);
+    setAuthError(null);
+
+    try {
+      if (Platform.OS === 'web') {
+        const location = (globalThis as { location?: { origin?: string } }).location;
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${location?.origin ?? ''}/${REDIRECT_PATH}`,
+          },
+        });
+
+        if (error) throw error;
+        return;
+      }
+
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: googleRedirectUri,
+          skipBrowserRedirect: true,
+        },
+      });
+
+      if (error) throw error;
+      if (!data.url) throw new Error('No se pudo obtener la URL de autenticación de Google.');
+
+      const result = await WebBrowser.openAuthSessionAsync(data.url, googleRedirectUri);
+      if (result.type !== 'success' || !result.url) {
+        throw new Error('Se canceló el inicio de sesión con Google.');
+      }
+
+      const redirectUrl = new URL(result.url);
+      const code = redirectUrl.searchParams.get('code');
+
+      if (code) {
+        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+        if (exchangeError) throw exchangeError;
+      } else {
+        const params = new URLSearchParams(redirectUrl.hash.replace(/^#/, ''));
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+
+        if (!accessToken || !refreshToken) {
+          throw new Error('No se recibieron las credenciales de Google.');
+        }
+
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        });
+        if (sessionError) throw sessionError;
+      }
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      setSession(sessionData.session);
+      router.replace('/(tabs)/dashboard');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo iniciar sesión con Google.';
+      setAuthError(message);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const register = async (email: string, password: string, name: string) => {
