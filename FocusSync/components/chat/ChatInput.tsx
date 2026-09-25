@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, TextInput, StyleSheet, Keyboard } from 'react-native';
 import { ChatInputProps } from '../../types';
-import { colors, spacing, borderRadius, typography, fontWeights, shadows } from '../../constants/theme';
+import { colors, spacing, borderRadius, typography, shadows } from '../../constants/theme';
 import { Button } from '../ui/Button';
 import { Ionicons } from '@expo/vector-icons';
 

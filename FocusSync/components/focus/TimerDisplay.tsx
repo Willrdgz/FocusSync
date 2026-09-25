@@ -1,6 +1,6 @@
 import React from 'react';
 import { Text, StyleSheet } from 'react-native';
-import { colors, typography, fontWeights } from '../../constants/theme';
+import { colors } from '../../constants/theme';
 
 interface TimerDisplayProps {
   timeRemaining: number;

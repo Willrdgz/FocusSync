@@ -318,3 +318,18 @@ export const cancelFocusSession = async (sessionId: string, realMinutes: number)
     throw error;
   }
 };
+
+export const completeFocusSession = async (sessionId: string, realMinutes: number) => {
+  const user = await requireAuthenticatedUser();
+  const { error } = await supabase
+    .from('focus_sessions')
+    .update({
+      status: 'completada',
+      real_minutes: Math.max(0, realMinutes),
+      finished_at: new Date().toISOString(),
+    })
+    .eq('id', sessionId)
+    .eq('user_id', user.id);
+
+  if (error) throw error;
+};

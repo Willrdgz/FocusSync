@@ -2,7 +2,7 @@ import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { ProgressRingProps } from '../../types';
-import { colors, spacing, typography, fontWeights } from '../../constants/theme';
+import { colors } from '../../constants/theme';
 
 export const ProgressRing = React.memo(({ 
   progress = 0, 

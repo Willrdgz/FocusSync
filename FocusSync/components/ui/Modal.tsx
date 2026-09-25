@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, Modal as RNModal, TouchableOpacity, Animated } from 'react-native';
+import { View, Text, StyleSheet, Modal as RNModal, Animated } from 'react-native';
 import { colors, spacing, borderRadius, typography, fontWeights, shadows } from '../../constants/theme';
 import { Button } from './Button';
 

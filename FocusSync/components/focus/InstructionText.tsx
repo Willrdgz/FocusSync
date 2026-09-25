@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
-import { colors, spacing, borderRadius, typography, fontWeights } from '../../constants/theme';
+import { colors, spacing, typography } from '../../constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 interface InstructionTextProps {

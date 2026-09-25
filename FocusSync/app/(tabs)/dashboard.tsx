@@ -4,11 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useAuth } from '../../hooks/useAuth';
-import { colors, spacing, borderRadius, typography, fontWeights, shadows } from '../../constants/theme';
+import { colors, spacing, borderRadius, typography, fontWeights } from '../../constants/theme';
 import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { MetricCard } from '../../components/ui/MetricCard';
+import { WeeklyFocusChart } from '../../components/analytics/WeeklyFocusChart';
 import { fetchStudyPlans } from '../../services/studyPlans';
 import { DashboardSummary, fetchDashboardSummary, formatMinutes } from '../../lib/service';
 import { StudyPlan } from '../../types';
@@ -140,6 +141,39 @@ export default function DashboardScreen() {
             <View style={[styles.progressFill, { width: `${dailyProgress}%` }]} />
           </View>
           <Text style={styles.progressCaption}>Meta diaria alcanzada</Text>
+        </Card>
+
+        <Card style={styles.analyticsCard}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Actividad semanal</Text>
+              <Text style={styles.sectionSubtitle}>Minutos enfocados por día</Text>
+            </View>
+            <Text style={styles.sessionsLabel}>{summary?.sessionsToday ?? 0} sesiones hoy</Text>
+          </View>
+          <WeeklyFocusChart data={summary?.weeklyActivity ?? []} />
+        </Card>
+
+        <Card style={styles.achievementsCard}>
+          <View style={styles.sectionHeader}>
+            <View>
+              <Text style={styles.sectionTitle}>Tus logros</Text>
+              <Text style={styles.sectionSubtitle}>
+                {summary?.achievements.filter((achievement) => achievement.unlocked).length ?? 0} desbloqueados
+              </Text>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/(tabs)/achievements' as never)}>
+              <Text style={styles.sectionLink}>Ver todos</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.achievementPreviewRow}>
+            {(summary?.achievements ?? []).slice(0, 3).map((achievement) => (
+              <View key={achievement.id} style={[styles.achievementPreview, !achievement.unlocked && styles.lockedAchievement]}>
+                <Ionicons name={achievement.icon} size={24} color={achievement.unlocked ? colors.warning : colors.textMuted} />
+                <Text numberOfLines={1} style={styles.achievementPreviewText}>{achievement.title}</Text>
+              </View>
+            ))}
+          </View>
         </Card>
 
         <Card style={styles.timelineCard}>
@@ -323,6 +357,22 @@ const styles = StyleSheet.create({
   timelineCard: {
     gap: spacing.md,
   },
+  analyticsCard: { gap: spacing.md },
+  achievementsCard: { gap: spacing.md },
+  sectionSubtitle: { ...typography.xs, color: colors.textMuted, marginTop: 2 },
+  sessionsLabel: { ...typography.xs, color: colors.primary, fontWeight: fontWeights.semibold },
+  achievementPreviewRow: { flexDirection: 'row', gap: spacing.sm },
+  achievementPreview: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    gap: spacing.xs,
+    padding: spacing.sm,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.surfaceHover,
+  },
+  lockedAchievement: { opacity: 0.45 },
+  achievementPreviewText: { ...typography.xs, color: colors.textPrimary, textAlign: 'center' },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',

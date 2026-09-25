@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { Session } from '../types';
+import { Achievement, AnalyticsSession, WeeklyActivity, buildWeeklyActivity, calculateAchievements, calculateCurrentStreak } from '../utils/analytics';
 
 export type FocusStatus = 'completed' | 'interrupted';
 export type DistractionType = 'dispositivo_levantado' | 'movimiento_detectado' | 'orientacion_incorrecta';
@@ -114,44 +115,71 @@ export interface DashboardSummary {
   distractionsToday: number;
   currentStreak: number;
   dailyGoalMinutes: number;
+  weeklyActivity: WeeklyActivity[];
+  achievements: Achievement[];
 }
 
 export async function fetchDashboardSummary(): Promise<DashboardSummary | null> {
   const userId = await getUserId();
   if (!userId) throw new Error('No hay sesión de usuario activa');
 
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
-
-  const [profileResult, sessionsResult, distractionsResult] = await Promise.all([
-    supabase.from('profiles').select('current_streak, daily_goal_minutes').eq('id', userId).single(),
+  const [profileResult, sessionsResult, distractionsResult, plansResult] = await Promise.all([
+    supabase.from('profiles').select('daily_goal_minutes').eq('id', userId).single(),
     supabase
       .from('focus_sessions')
-      .select('real_minutes')
-      .eq('user_id', userId)
-      .gte('started_at', startOfToday.toISOString()),
+      .select('id, real_minutes, status, started_at')
+      .eq('user_id', userId),
     supabase
       .from('distractions')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('detected_at', startOfToday.toISOString()),
+      .select('id, session_id, detected_at')
+      .eq('user_id', userId),
+    supabase.from('study_plans').select('id', { count: 'exact', head: true }).eq('user_id', userId),
   ]);
 
   if (profileResult.error) throw profileResult.error;
   if (sessionsResult.error) throw sessionsResult.error;
   if (distractionsResult.error) throw distractionsResult.error;
+  if (plansResult.error) throw plansResult.error;
 
-  const focusedMinutesToday = (sessionsResult.data ?? []).reduce(
-    (total, session) => total + (session.real_minutes ?? 0),
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const interruptionCounts = new Map<string, number>();
+  (distractionsResult.data ?? []).forEach((distraction) => {
+    interruptionCounts.set(distraction.session_id, (interruptionCounts.get(distraction.session_id) ?? 0) + 1);
+  });
+
+  const analyticsSessions: AnalyticsSession[] = (sessionsResult.data ?? []).map((session) => ({
+    id: session.id,
+    realMinutes: session.real_minutes ?? 0,
+    status: session.status,
+    startedAt: session.started_at,
+    interruptionCount: interruptionCounts.get(session.id) ?? 0,
+  }));
+  const todaySessions = analyticsSessions.filter(
+    (session) => new Date(session.startedAt).getTime() >= startOfToday.getTime(),
+  );
+  const distractionsToday = (distractionsResult.data ?? []).filter(
+    (distraction) => new Date(distraction.detected_at).getTime() >= startOfToday.getTime(),
+  ).length;
+  const currentStreak = calculateCurrentStreak(analyticsSessions);
+
+  const focusedMinutesToday = todaySessions.reduce(
+    (total, session) => total + session.realMinutes,
     0,
   );
 
   return {
     focusedMinutesToday,
-    sessionsToday: sessionsResult.data?.length ?? 0,
-    distractionsToday: distractionsResult.count ?? 0,
-    currentStreak: profileResult.data.current_streak ?? 0,
+    sessionsToday: todaySessions.length,
+    distractionsToday,
+    currentStreak,
     dailyGoalMinutes: profileResult.data.daily_goal_minutes ?? 120,
+    weeklyActivity: buildWeeklyActivity(analyticsSessions),
+    achievements: calculateAchievements(
+      analyticsSessions,
+      plansResult.count ?? 0,
+      currentStreak,
+    ),
   };
 }
 

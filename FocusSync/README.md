@@ -71,12 +71,35 @@ npm run start
 - Autenticación real con Supabase Auth.
 - Navegación protegida por sesión.
 - Dashboard con planes pendientes desde Supabase.
+- Estadísticas personales, actividad semanal y progreso de meta diaria.
+- Pantalla de logros con progreso y desbloqueo por usuario.
 - IA Coach conectado a Edge Function.
 - Generación de planes de estudio con Gemini.
 - Guardado de planes y bloques en Supabase.
 - Vista de detalle del plan con recursos y pasos.
 - Modo enfoque con registro inicial de sesiones e interrupciones.
 - Configuración inicial de Docker para entorno de desarrollo.
+
+## Calidad del código
+
+Ejecuta todas las comprobaciones con:
+
+```bash
+npm run quality
+```
+
+Resultado de referencia del 24 de septiembre de 2026:
+
+- 3 suites y 20 pruebas automatizadas aprobadas.
+- 100% de cobertura de líneas, funciones y declaraciones.
+- 92.3% de cobertura de ramas.
+- 0 errores y 0 advertencias de ESLint.
+- 0 errores de TypeScript.
+- Exportación web de Expo completada correctamente.
+
+GitHub Actions ejecuta lint, TypeScript y cobertura en cada pull request y actualización de `main` mediante `.github/workflows/quality.yml`.
+
+`npm audit` conserva alertas transitivas de Expo, Metro y React Native. No se utiliza `npm audit fix --force` porque puede introducir cambios incompatibles con Expo SDK 54; estas dependencias deben revisarse durante la próxima actualización controlada del SDK.
 
 ## Nota sobre Supabase y Gemini
 

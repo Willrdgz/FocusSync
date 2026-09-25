@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
-import { ChatMessage, ChatBubbleProps } from '../../types';
+import { ChatBubbleProps } from '../../types';
 import { colors, spacing, borderRadius, typography, fontWeights } from '../../constants/theme';
 import { Button } from '../ui/Button';
 import { Ionicons } from '@expo/vector-icons';

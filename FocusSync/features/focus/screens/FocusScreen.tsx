@@ -13,7 +13,7 @@ import { Modal } from '../../../components/ui/Modal';
 import { borderRadius, colors, fontWeights, spacing, typography } from '../../../constants/theme';
 import { useDeviceOrientation } from '../../../hooks/useDeviceOrientation';
 import { useFocusTimer } from '../../../hooks/useFocusTimer';
-import { cancelFocusSession, createFocusSession, recordDistraction, resumeFocusSession } from '../../../services/studyPlans';
+import { cancelFocusSession, completeFocusSession, createFocusSession, recordDistraction, resumeFocusSession } from '../../../services/studyPlans';
 
 export default function FocusScreen() {
   const { planId, blockId, durationMinutes } = useLocalSearchParams<{
@@ -45,11 +45,13 @@ export default function FocusScreen() {
   const [savingSession, setSavingSession] = useState(false);
   const [pendingResumeSync, setPendingResumeSync] = useState(false);
   const distractionHandled = useRef(false);
+  const completionHandled = useRef(false);
 
   useEffect(() => {
     prepareTimer(initialDuration);
     setSessionStarted(false);
     setFocusSessionId(null);
+    completionHandled.current = false;
   }, [blockId, initialDuration, planId, prepareTimer]);
 
   useEffect(() => {
@@ -93,6 +95,14 @@ export default function FocusScreen() {
       }).catch(() => undefined);
     }
   }, [focusSessionId, initialDuration, isPaused, isRunning, sensors.isFaceDown, sensors.isMoving, sensors.snapshot, sessionStarted, simulateDistraction, timeRemaining]);
+
+  useEffect(() => {
+    if (!sessionStarted || timeRemaining !== 0 || !focusSessionId || completionHandled.current) return;
+    completionHandled.current = true;
+    completeFocusSession(focusSessionId, plannedMinutes).catch(() => {
+      completionHandled.current = false;
+    });
+  }, [focusSessionId, plannedMinutes, sessionStarted, timeRemaining]);
 
   const requestStart = () => startTimer(initialDuration);
 
