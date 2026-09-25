@@ -9,8 +9,8 @@ import { Card } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
 import { Badge } from '../../components/ui/Badge';
 import { MetricCard } from '../../components/ui/MetricCard';
-import { mockDashboardMetrics } from '../../constants/mockData';
 import { fetchStudyPlans } from '../../services/studyPlans';
+import { DashboardSummary, fetchDashboardSummary, formatMinutes } from '../../lib/service';
 import { StudyPlan } from '../../types';
 
 const difficultyVariant = (difficulty: StudyPlan['difficulty']) => {
@@ -21,8 +21,8 @@ const difficultyVariant = (difficulty: StudyPlan['difficulty']) => {
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
-  const distractionCount = mockDashboardMetrics.distractions.split(' ')[0];
   const [plans, setPlans] = useState<StudyPlan[]>([]);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loadingPlans, setLoadingPlans] = useState(true);
   const [plansError, setPlansError] = useState<string | null>(null);
 
@@ -32,14 +32,16 @@ export default function DashboardScreen() {
     setLoadingPlans(true);
     setPlansError(null);
 
-    fetchStudyPlans()
-      .then((data) => {
+    Promise.all([fetchStudyPlans(), fetchDashboardSummary()])
+      .then(([data, dashboardSummary]) => {
         if (!active) return;
         setPlans(data);
+        setSummary(dashboardSummary);
       })
       .catch((error) => {
         if (!active) return;
         setPlans([]);
+        setSummary(null);
         setPlansError(error instanceof Error ? error.message : 'No se pudieron cargar los planes.');
       })
       .finally(() => {
@@ -53,6 +55,9 @@ export default function DashboardScreen() {
   }, []);
 
   useFocusEffect(loadPlans);
+
+  const dailyGoal = summary?.dailyGoalMinutes ?? 120;
+  const dailyProgress = Math.min(100, Math.round(((summary?.focusedMinutesToday ?? 0) / dailyGoal) * 100));
 
   const handleOpenPlan = (planId: string) => {
     router.push(`/plans/${planId}` as never);
@@ -100,21 +105,21 @@ export default function DashboardScreen() {
         <View style={styles.metricsGrid}>
           <MetricCard
             label="Tiempo enfocado"
-            value={mockDashboardMetrics.focusedTime}
+            value={formatMinutes(summary?.focusedMinutesToday ?? 0)}
             icon="timer-outline"
             color={colors.primary}
             style={styles.metricCard}
           />
           <MetricCard
             label="Interrupciones"
-            value={distractionCount}
+            value={String(summary?.distractionsToday ?? 0)}
             icon="alert-circle-outline"
             color={colors.danger}
             style={styles.metricCard}
           />
           <MetricCard
             label="Racha actual"
-            value={mockDashboardMetrics.streak}
+            value={`${summary?.currentStreak ?? 0} días`}
             icon="flame-outline"
             color={colors.warning}
             style={styles.metricCard}
@@ -129,10 +134,10 @@ export default function DashboardScreen() {
               </View>
               <Text style={styles.progressTitle}>Progreso diario</Text>
             </View>
-            <Text style={styles.progressPercent}>{mockDashboardMetrics.dailyGoal}%</Text>
+            <Text style={styles.progressPercent}>{dailyProgress}%</Text>
           </View>
           <View style={styles.progressTrack}>
-            <View style={[styles.progressFill, { width: `${mockDashboardMetrics.dailyGoal}%` }]} />
+            <View style={[styles.progressFill, { width: `${dailyProgress}%` }]} />
           </View>
           <Text style={styles.progressCaption}>Meta diaria alcanzada</Text>
         </Card>

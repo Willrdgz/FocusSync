@@ -41,6 +41,9 @@ export async function finishFocusSession(
   sessionId: string,
   input: { realMinutes: number; status: FocusStatus }
 ): Promise<void> {
+  const userId = await getUserId();
+  if (!userId) throw new Error('No hay sesión de usuario activa');
+
   const { error } = await supabase
     .from('focus_sessions')
     .update({
@@ -48,7 +51,8 @@ export async function finishFocusSession(
       status: input.status === 'completed' ? 'completada' : 'cancelada',
       finished_at: new Date().toISOString(),
     })
-    .eq('id', sessionId);
+    .eq('id', sessionId)
+    .eq('user_id', userId);
 
   if (error) throw error;
 }
@@ -70,16 +74,23 @@ function getBlockTitle(blocks: FocusSessionRow['study_blocks']): string | null {
 }
 
 export async function fetchFocusSessions(): Promise<Session[]> {
+  const userId = await getUserId();
+  if (!userId) throw new Error('No hay sesión de usuario activa');
+
   const { data, error } = await supabase
     .from('focus_sessions')
     .select('id, planned_minutes, real_minutes, status, started_at, finished_at, study_blocks(title)')
+    .eq('user_id', userId)
     .order('started_at', { ascending: false });
 
   if (error) throw error;
 
   const rows = (data ?? []) as FocusSessionRow[];
 
-  const { data: distractionRows } = await supabase.from('distractions').select('session_id');
+  const { data: distractionRows } = await supabase
+    .from('distractions')
+    .select('session_id')
+    .eq('user_id', userId);
   const interruptionCounts: Record<string, number> = {};
   for (const row of distractionRows ?? []) {
     interruptionCounts[row.session_id] = (interruptionCounts[row.session_id] ?? 0) + 1;
@@ -106,19 +117,41 @@ export interface DashboardSummary {
 }
 
 export async function fetchDashboardSummary(): Promise<DashboardSummary | null> {
-  const { data, error } = await supabase
-    .from('dashboard_summary')
-    .select('focused_minutes_today, sessions_today, distractions_today, current_streak, daily_goal_minutes')
-    .single();
+  const userId = await getUserId();
+  if (!userId) throw new Error('No hay sesión de usuario activa');
 
-  if (error) return null;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const [profileResult, sessionsResult, distractionsResult] = await Promise.all([
+    supabase.from('profiles').select('current_streak, daily_goal_minutes').eq('id', userId).single(),
+    supabase
+      .from('focus_sessions')
+      .select('real_minutes')
+      .eq('user_id', userId)
+      .gte('started_at', startOfToday.toISOString()),
+    supabase
+      .from('distractions')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .gte('detected_at', startOfToday.toISOString()),
+  ]);
+
+  if (profileResult.error) throw profileResult.error;
+  if (sessionsResult.error) throw sessionsResult.error;
+  if (distractionsResult.error) throw distractionsResult.error;
+
+  const focusedMinutesToday = (sessionsResult.data ?? []).reduce(
+    (total, session) => total + (session.real_minutes ?? 0),
+    0,
+  );
 
   return {
-    focusedMinutesToday: data.focused_minutes_today ?? 0,
-    sessionsToday: data.sessions_today ?? 0,
-    distractionsToday: data.distractions_today ?? 0,
-    currentStreak: data.current_streak ?? 0,
-    dailyGoalMinutes: data.daily_goal_minutes ?? 120,
+    focusedMinutesToday,
+    sessionsToday: sessionsResult.data?.length ?? 0,
+    distractionsToday: distractionsResult.count ?? 0,
+    currentStreak: profileResult.data.current_streak ?? 0,
+    dailyGoalMinutes: profileResult.data.daily_goal_minutes ?? 120,
   };
 }
 

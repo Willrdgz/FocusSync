@@ -30,7 +30,20 @@ export interface GenerateStudyPlanResponse {
 
 const studyPlanCache = new Map<string, StudyPlan>();
 
-export const getCachedStudyPlan = (id?: string) => (id ? studyPlanCache.get(id) ?? null : null);
+const getPlanCacheKey = (userId: string, planId: string) => `${userId}:${planId}`;
+
+export const getCachedStudyPlan = (userId?: string, planId?: string) =>
+  userId && planId ? studyPlanCache.get(getPlanCacheKey(userId, planId)) ?? null : null;
+
+const requireAuthenticatedUser = async () => {
+  const { data, error } = await supabase.auth.getUser();
+
+  if (error || !data.user) {
+    throw error ?? new Error('Debes iniciar sesion para consultar tus planes.');
+  }
+
+  return data.user;
+};
 
 const getEdgeFunctionErrorMessage = async (error: unknown) => {
   if (typeof error === 'object' && error !== null && 'context' in error) {
@@ -120,6 +133,7 @@ export const generateStudyPlan = async (prompt: string) => {
 };
 
 export const fetchStudyPlans = async () => {
+  const user = await requireAuthenticatedUser();
   const { data, error } = await supabase
     .from('study_plans')
     .select(
@@ -142,6 +156,7 @@ export const fetchStudyPlans = async () => {
         )
       `,
     )
+    .eq('user_id', user.id)
     .eq('is_active', true)
     .order('created_at', { ascending: false })
     .order('block_order', { referencedTable: 'study_blocks', ascending: true });
@@ -152,12 +167,13 @@ export const fetchStudyPlans = async () => {
 
   const plans = (data ?? []).map((row) => mapStudyPlan(row as StudyPlanRow));
 
-  plans.forEach((plan) => studyPlanCache.set(plan.id, plan));
+  plans.forEach((plan) => studyPlanCache.set(getPlanCacheKey(user.id, plan.id), plan));
 
   return plans;
 };
 
 export const fetchStudyPlanById = async (id: string) => {
+  const user = await requireAuthenticatedUser();
   const { data, error } = await supabase
     .from('study_plans')
     .select(
@@ -181,6 +197,7 @@ export const fetchStudyPlanById = async (id: string) => {
       `,
     )
     .eq('id', id)
+    .eq('user_id', user.id)
     .single();
 
   if (error) {
@@ -189,7 +206,7 @@ export const fetchStudyPlanById = async (id: string) => {
 
   const plan = mapStudyPlan(data as StudyPlanRow);
 
-  studyPlanCache.set(plan.id, plan);
+  studyPlanCache.set(getPlanCacheKey(user.id, plan.id), plan);
 
   return plan;
 };
@@ -265,17 +282,20 @@ export const recordDistraction = async ({
       status: 'pausada',
       paused_at: new Date().toISOString(),
     })
-    .eq('id', sessionId);
+    .eq('id', sessionId)
+    .eq('user_id', userData.user.id);
 };
 
 export const resumeFocusSession = async (sessionId: string) => {
+  const user = await requireAuthenticatedUser();
   const { error } = await supabase
     .from('focus_sessions')
     .update({
       status: 'en_ejecucion',
       paused_at: null,
     })
-    .eq('id', sessionId);
+    .eq('id', sessionId)
+    .eq('user_id', user.id);
 
   if (error) {
     throw error;
@@ -283,6 +303,7 @@ export const resumeFocusSession = async (sessionId: string) => {
 };
 
 export const cancelFocusSession = async (sessionId: string, realMinutes: number) => {
+  const user = await requireAuthenticatedUser();
   const { error } = await supabase
     .from('focus_sessions')
     .update({
@@ -290,7 +311,8 @@ export const cancelFocusSession = async (sessionId: string, realMinutes: number)
       real_minutes: Math.max(0, realMinutes),
       finished_at: new Date().toISOString(),
     })
-    .eq('id', sessionId);
+    .eq('id', sessionId)
+    .eq('user_id', user.id);
 
   if (error) {
     throw error;

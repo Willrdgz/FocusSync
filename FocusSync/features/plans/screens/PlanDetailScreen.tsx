@@ -10,11 +10,14 @@ import { borderRadius, colors, fontWeights, spacing, typography } from '../../..
 import { fetchStudyPlanById, getCachedStudyPlan } from '../../../services/studyPlans';
 import { StudyPlan } from '../../../types';
 import { getBlockTypeLabel } from '../../../utils/studyPlanFormatters';
+import { useAuth } from '../../../hooks/useAuth';
 
 export function PlanDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [plan, setPlan] = useState<StudyPlan | null>(() => getCachedStudyPlan(id));
-  const [loading, setLoading] = useState(() => !getCachedStudyPlan(id));
+  const { session } = useAuth();
+  const userId = session?.user.id;
+  const [plan, setPlan] = useState<StudyPlan | null>(() => getCachedStudyPlan(userId, id));
+  const [loading, setLoading] = useState(() => !getCachedStudyPlan(userId, id));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -24,7 +27,7 @@ export function PlanDetailScreen() {
       return;
     }
 
-    const cachedPlan = getCachedStudyPlan(id);
+    const cachedPlan = getCachedStudyPlan(userId, id);
 
     if (cachedPlan) {
       setPlan(cachedPlan);
@@ -56,7 +59,7 @@ export function PlanDetailScreen() {
     return () => {
       mounted = false;
     };
-  }, [id]);
+  }, [id, userId]);
 
   const firstBlock = plan?.blocks[0];
 
