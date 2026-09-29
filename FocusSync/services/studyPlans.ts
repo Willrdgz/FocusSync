@@ -46,40 +46,38 @@ const requireAuthenticatedUser = async () => {
 };
 
 const getEdgeFunctionErrorMessage = async (error: unknown) => {
+  const fallback = 'No se pudo conectar con la IA. Inténtalo de nuevo en un momento.';
   if (typeof error === 'object' && error !== null && 'context' in error) {
     const context = (error as { context?: unknown }).context;
-
     if (context instanceof Response) {
+      if (context.status === 401 || context.status === 403) return 'Tu sesión venció. Inicia sesión nuevamente.';
       try {
         const payload = await context.clone().json();
-
-        if (
-          typeof payload === 'object' &&
-          payload !== null &&
-          'error' in payload &&
-          typeof payload.error === 'string'
-        ) {
-          return payload.error;
+        const message = typeof payload?.error === 'string' ? payload.error : '';
+        if (/503|429|high demand|UNAVAILABLE|ocupada/.test(message) || context.status === 503) {
+          return 'La IA está ocupada en este momento. Espera un momento y vuelve a intentarlo.';
         }
-      } catch {
-        try {
-          const text = await context.clone().text();
-
-          if (text.trim()) {
-            return text.trim();
-          }
-        } catch {
-          // Mantiene el fallback generico de abajo.
-        }
-      }
+      } catch { /* Nunca mostrar respuestas técnicas al usuario. */ }
     }
   }
+  return fallback;
+};
 
-  if (error instanceof Error) {
-    return error.message;
+export interface HistoryFeedback {
+  recommendation: string | null;
+  generatedAt?: string;
+  empty?: boolean;
+}
+
+export const fetchHistoryFeedback = async (): Promise<HistoryFeedback> => {
+  const { data, error } = await supabase.functions.invoke<HistoryFeedback>('generate-study-plan', {
+    body: { action: 'feedback' },
+  });
+  if (error) throw new Error(await getEdgeFunctionErrorMessage(error));
+  if (!data || (!data.empty && typeof data.recommendation !== 'string')) {
+    throw new Error('No se pudo generar tu consejo. Inténtalo de nuevo.');
   }
-
-  return 'La IA Coach no pudo responder en este momento.';
+  return data;
 };
 
 const normalizeStringArray = (value: unknown) => {

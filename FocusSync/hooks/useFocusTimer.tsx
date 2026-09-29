@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Alert } from 'react-native';
 
 interface UseFocusTimerReturn {
   timeRemaining: number;
@@ -7,6 +6,7 @@ interface UseFocusTimerReturn {
   isPaused: boolean;
   distractionDetected: boolean;
   waitingForFaceDown: boolean;
+  isCompleted: boolean;
   prepareTimer: (duration: number) => void;
   startTimer: (duration: number) => void;
   activateTimer: () => void;
@@ -23,30 +23,31 @@ export function useFocusTimer(): UseFocusTimerReturn {
   const [isPaused, setIsPaused] = useState(false);
   const [distractionDetected, setDistractionDetected] = useState(false);
   const [waitingForFaceDown, setWaitingForFaceDown] = useState(false);
+  const [isCompleted, setIsCompleted] = useState(false);
 
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
 
-    if (isRunning && !isPaused && timeRemaining > 0) {
+    if (isRunning && !isPaused && !waitingForFaceDown && timeRemaining > 0) {
       interval = setInterval(() => {
-        setTimeRemaining((prev) => {
-          if (prev <= 1) {
-            setIsRunning(false);
-            setIsPaused(false);
-            Alert.alert('¡Sesión completada!', 'Has completado tu bloque de estudio.');
-            return 0;
-          }
-          return prev - 1;
-        });
+        setTimeRemaining((prev) => Math.max(0, prev - 1));
       }, 1000);
     }
 
     return () => {
       if (interval) clearInterval(interval);
     };
+  }, [isRunning, isPaused, timeRemaining, waitingForFaceDown]);
+
+  useEffect(() => {
+    if (isRunning && !isPaused && timeRemaining === 0) {
+      setIsRunning(false);
+      setIsCompleted(true);
+    }
   }, [isRunning, isPaused, timeRemaining]);
 
   const prepareTimer = useCallback((duration: number) => {
+    setIsCompleted(false);
     setTimeRemaining(duration);
     setIsRunning(false);
     setIsPaused(false);
@@ -55,6 +56,7 @@ export function useFocusTimer(): UseFocusTimerReturn {
   }, []);
 
   const startTimer = useCallback((duration: number) => {
+    setIsCompleted(false);
     setTimeRemaining((current) => current || duration);
     setWaitingForFaceDown(true);
     setIsPaused(false);
@@ -77,6 +79,7 @@ export function useFocusTimer(): UseFocusTimerReturn {
   }, []);
 
   const stopTimer = useCallback(() => {
+    setIsCompleted(false);
     setIsRunning(false);
     setIsPaused(false);
     setDistractionDetected(false);
@@ -103,6 +106,7 @@ export function useFocusTimer(): UseFocusTimerReturn {
     isPaused,
     distractionDetected,
     waitingForFaceDown,
+    isCompleted,
     prepareTimer,
     startTimer,
     activateTimer,

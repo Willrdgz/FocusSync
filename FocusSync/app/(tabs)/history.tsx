@@ -6,7 +6,8 @@ import { useFocusEffect } from 'expo-router';
 import { colors, spacing, borderRadius, typography, fontWeights } from '../../constants/theme';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { mockAIFeedback } from '../../constants/mockData';
+import { fetchHistoryFeedback } from '../../services/studyPlans';
+import { useAuth } from '../../hooks/useAuth';
 import { fetchFocusSessions } from '../../lib/service';
 import { Session } from '../../types';
 
@@ -43,6 +44,11 @@ const SessionCard = ({ session }: SessionCardProps) => (
 );
 
 export default function HistoryScreen() {
+  const { user } = useAuth();
+  const [advice, setAdvice] = useState<string | null>(null);
+  const [adviceLoading, setAdviceLoading] = useState(false);
+  const [adviceError, setAdviceError] = useState<string | null>(null);
+  const [retryAdvice, setRetryAdvice] = useState(0);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -67,6 +73,24 @@ export default function HistoryScreen() {
       };
     }, [])
   );
+
+  useFocusEffect(useCallback(() => {
+    let active = true;
+    setAdvice(null);
+    setAdviceError(null);
+    if (!user?.id) return;
+    setAdviceLoading(true);
+    fetchHistoryFeedback().then((result) => {
+      if (active) setAdvice(result.empty
+        ? 'Completa una sesión para recibir un consejo basado en tu actividad reciente.'
+        : result.recommendation);
+    }).catch((error) => {
+      if (active) setAdviceError(error instanceof Error ? error.message : 'No se pudo generar tu consejo.');
+    }).finally(() => {
+      if (active) setAdviceLoading(false);
+    });
+    return () => { active = false; };
+  }, [user?.id, retryAdvice]));
 
   const renderItem = ({ item }: { item: Session }) => (
     <TouchableOpacity style={styles.listItem} activeOpacity={0.9}>
@@ -110,7 +134,12 @@ export default function HistoryScreen() {
             </View>
             <Text style={styles.aiFeedbackTitle}>Consejo de la IA</Text>
           </View>
-          <Text style={styles.aiFeedbackText}>{mockAIFeedback}</Text>
+          {adviceLoading ? <Text style={styles.aiFeedbackText}>Analizando tus sesiones e interrupciones...</Text> :
+            <Text style={styles.aiFeedbackText}>{adviceError || advice}</Text>}
+          {!adviceLoading && !adviceError && advice && <Text style={styles.emptySubtext}>Actividad de los últimos 30 días · hasta 100 sesiones</Text>}
+          {adviceError && <TouchableOpacity accessibilityRole="button" onPress={() => setRetryAdvice((value) => value + 1)}>
+            <Text style={styles.aiFeedbackTitle}>Reintentar consejo</Text>
+          </TouchableOpacity>}
         </Card>
       </View>
     </SafeAreaView>

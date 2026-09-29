@@ -1,3 +1,5 @@
+import { AI_BUSY_MESSAGE, fetchGemini } from './gemini.ts';
+import { generateFeedback } from './feedback.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.112.4';
 
 const corsHeaders = {
@@ -124,7 +126,10 @@ Deno.serve(async (req) => {
       return jsonResponse({ error: 'Sesion invalida. Inicia sesion nuevamente.' }, 401);
     }
 
-    const { prompt } = (await req.json()) as { prompt?: string };
+    const { prompt, action } = (await req.json()) as { prompt?: string; action?: string };
+    if (action === 'feedback') {
+      return jsonResponse(await generateFeedback(authClient, userData.user.id, geminiApiKey));
+    }
 
     if (!prompt?.trim()) {
       return jsonResponse({ error: 'Describe que necesitas estudiar.' }, 400);
@@ -153,7 +158,7 @@ El JSON debe tener esta forma:
 Usa bloques entre 10 y 60 minutos. Incluye descansos cuando el plan supere 50 minutos.
 `;
 
-    const geminiResponse = await fetch(
+    const geminiResponse = await fetchGemini(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`,
       {
         method: 'POST',
@@ -173,14 +178,7 @@ Usa bloques entre 10 y 60 minutos. Incluye descansos cuando el plan supere 50 mi
     );
 
     if (!geminiResponse.ok) {
-      const geminiError = await geminiResponse.text();
-
-      return jsonResponse(
-        {
-          error: `Gemini no pudo generar el plan (${geminiResponse.status}). ${geminiError.slice(0, 300)}`,
-        },
-        502,
-      );
+      return jsonResponse({ error: AI_BUSY_MESSAGE }, 503);
     }
 
     const geminiPayload = await geminiResponse.json();
@@ -208,7 +206,7 @@ Usa bloques entre 10 y 60 minutos. Incluye descansos cuando el plan supere 50 mi
       .single();
 
     if (planError || !planRow) {
-      return jsonResponse({ error: planError?.message ?? 'No se pudo guardar el plan generado.' }, 500);
+      return jsonResponse({ error: 'No se pudo guardar el plan generado. Inténtalo de nuevo.' }, 500);
     }
 
     const blockRows = generatedPlan.blocks.map((block, index) => ({
@@ -229,7 +227,7 @@ Usa bloques entre 10 y 60 minutos. Incluye descansos cuando el plan supere 50 mi
       .order('block_order', { ascending: true });
 
     if (blocksError || !savedBlocks) {
-      return jsonResponse({ error: blocksError?.message ?? 'No se pudieron guardar los bloques del plan.' }, 500);
+      return jsonResponse({ error: 'No se pudieron guardar los bloques del plan. Inténtalo de nuevo.' }, 500);
     }
 
     await adminClient.from('ai_messages').insert([
@@ -277,7 +275,7 @@ Usa bloques entre 10 y 60 minutos. Incluye descansos cuando el plan supere 50 mi
   } catch (error) {
     return jsonResponse(
       {
-        error: error instanceof Error ? error.message : 'No se pudo generar el plan.',
+        error: error instanceof Error && error.message === AI_BUSY_MESSAGE ? AI_BUSY_MESSAGE : 'No se pudo completar la solicitud. Inténtalo de nuevo.',
       },
       500,
     );
