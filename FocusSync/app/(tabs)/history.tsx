@@ -44,7 +44,8 @@ const SessionCard = ({ session }: SessionCardProps) => (
 );
 
 export default function HistoryScreen() {
-  const { user } = useAuth();
+  const { session: authSession } = useAuth();
+  const userId = authSession?.user.id;
   const [advice, setAdvice] = useState<string | null>(null);
   const [adviceLoading, setAdviceLoading] = useState(false);
   const [adviceError, setAdviceError] = useState<string | null>(null);
@@ -55,6 +56,7 @@ export default function HistoryScreen() {
   useFocusEffect(
     useCallback(() => {
       let active = true;
+      if (!userId) { setSessions([]); setLoading(false); return; }
       setLoading(true);
 
       fetchFocusSessions()
@@ -71,14 +73,14 @@ export default function HistoryScreen() {
       return () => {
         active = false;
       };
-    }, [])
+    }, [userId])
   );
 
   useFocusEffect(useCallback(() => {
     let active = true;
     setAdvice(null);
     setAdviceError(null);
-    if (!user?.id) return;
+    if (!userId) { setAdviceLoading(false); return; }
     setAdviceLoading(true);
     fetchHistoryFeedback().then((result) => {
       if (active) setAdvice(result.empty
@@ -90,7 +92,9 @@ export default function HistoryScreen() {
       if (active) setAdviceLoading(false);
     });
     return () => { active = false; };
-  }, [user?.id, retryAdvice]));
+    // The retry counter intentionally reruns this request after a failed generation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, retryAdvice]));
 
   const renderItem = ({ item }: { item: Session }) => (
     <TouchableOpacity style={styles.listItem} activeOpacity={0.9}>
