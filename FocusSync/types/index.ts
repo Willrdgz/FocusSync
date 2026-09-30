@@ -19,6 +19,7 @@ export interface Session {
   plannedDuration?: number;
   actualDuration?: number;
   createdAt?: string;
+  status?: string;
 }
 
 export interface DailyActivity {

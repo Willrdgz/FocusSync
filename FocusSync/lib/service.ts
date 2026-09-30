@@ -106,6 +106,7 @@ export async function fetchFocusSessions(): Promise<Session[]> {
     plannedDuration: row.planned_minutes,
     actualDuration: row.real_minutes,
     createdAt: row.started_at,
+    status: row.status,
   }));
 }
 

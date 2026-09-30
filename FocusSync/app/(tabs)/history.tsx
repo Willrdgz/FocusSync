@@ -6,10 +6,10 @@ import { useFocusEffect } from 'expo-router';
 import { colors, spacing, borderRadius, typography, fontWeights } from '../../constants/theme';
 import { Card } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { fetchHistoryFeedback } from '../../services/studyPlans';
 import { useAuth } from '../../hooks/useAuth';
 import { fetchFocusSessions } from '../../lib/service';
 import { Session } from '../../types';
+import { buildStudyAdvice } from '../../utils/studyAdvice';
 
 interface SessionCardProps {
   session: Session;
@@ -46,10 +46,7 @@ const SessionCard = ({ session }: SessionCardProps) => (
 export default function HistoryScreen() {
   const { session: authSession } = useAuth();
   const userId = authSession?.user.id;
-  const [advice, setAdvice] = useState<string | null>(null);
-  const [adviceLoading, setAdviceLoading] = useState(false);
-  const [adviceError, setAdviceError] = useState<string | null>(null);
-  const [retryAdvice, setRetryAdvice] = useState(0);
+  const [adviceVisible, setAdviceVisible] = useState(true);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -57,6 +54,7 @@ export default function HistoryScreen() {
     useCallback(() => {
       let active = true;
       if (!userId) { setSessions([]); setLoading(false); return; }
+      setAdviceVisible(true);
       setLoading(true);
 
       fetchFocusSessions()
@@ -76,25 +74,7 @@ export default function HistoryScreen() {
     }, [userId])
   );
 
-  useFocusEffect(useCallback(() => {
-    let active = true;
-    setAdvice(null);
-    setAdviceError(null);
-    if (!userId) { setAdviceLoading(false); return; }
-    setAdviceLoading(true);
-    fetchHistoryFeedback().then((result) => {
-      if (active) setAdvice(result.empty
-        ? 'Completa una sesión para recibir un consejo basado en tu actividad reciente.'
-        : result.recommendation);
-    }).catch((error) => {
-      if (active) setAdviceError(error instanceof Error ? error.message : 'No se pudo generar tu consejo.');
-    }).finally(() => {
-      if (active) setAdviceLoading(false);
-    });
-    return () => { active = false; };
-    // The retry counter intentionally reruns this request after a failed generation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, retryAdvice]));
+  const advice = buildStudyAdvice(sessions);
 
   const renderItem = ({ item }: { item: Session }) => (
     <TouchableOpacity style={styles.listItem} activeOpacity={0.9}>
@@ -118,7 +98,7 @@ export default function HistoryScreen() {
           data={sessions}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, adviceVisible && styles.listContentWithAdvice]}
           showsVerticalScrollIndicator={false}
           ListEmptyComponent={
             <View style={styles.emptyState}>
@@ -130,22 +110,23 @@ export default function HistoryScreen() {
         />
       )}
 
-      <View style={styles.aiFeedbackContainer}>
+      {adviceVisible && !loading && <View style={styles.aiFeedbackContainer}>
         <Card style={styles.aiFeedbackCard}>
           <View style={styles.aiFeedbackHeader}>
             <View style={styles.aiFeedbackIcon}>
               <Ionicons name="sparkles" size={20} color={colors.primary} />
             </View>
-            <Text style={styles.aiFeedbackTitle}>Consejo de la IA</Text>
+            <View style={styles.aiFeedbackHeading}>
+              <Text style={styles.aiFeedbackTitle}>{advice.title}</Text>
+              <Text style={styles.aiFeedbackLabel}>Consejo de enfoque</Text>
+            </View>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cerrar consejo" onPress={() => setAdviceVisible(false)} style={styles.closeAdvice}>
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
-          {adviceLoading ? <Text style={styles.aiFeedbackText}>Analizando tus sesiones e interrupciones...</Text> :
-            <Text style={styles.aiFeedbackText}>{adviceError || advice}</Text>}
-          {!adviceLoading && !adviceError && advice && <Text style={styles.emptySubtext}>Actividad de los últimos 30 días · hasta 100 sesiones</Text>}
-          {adviceError && <TouchableOpacity accessibilityRole="button" onPress={() => setRetryAdvice((value) => value + 1)}>
-            <Text style={styles.aiFeedbackTitle}>Reintentar consejo</Text>
-          </TouchableOpacity>}
+          <Text style={styles.aiFeedbackText}>{advice.message}</Text>
         </Card>
-      </View>
+      </View>}
     </SafeAreaView>
   );
 }
@@ -178,6 +159,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingBottom: spacing.xxl,
   },
+  listContentWithAdvice: { paddingBottom: 230 },
   loadingState: {
     flex: 1,
     alignItems: 'center',
@@ -245,20 +227,30 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   aiFeedbackContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.xl,
+    zIndex: 20,
+    elevation: 20,
   },
   aiFeedbackCard: {
     borderWidth: 2,
     borderColor: colors.primary,
-    backgroundColor: colors.primary + '10',
+    backgroundColor: colors.surface,
+    opacity: 1,
+    elevation: 20,
   },
   aiFeedbackHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginBottom: spacing.md,
   },
+  aiFeedbackHeading: { flex: 1 },
+  aiFeedbackLabel: { ...typography.xs, color: colors.textMuted, marginTop: 2 },
+  closeAdvice: { padding: spacing.sm, marginRight: -spacing.sm },
   aiFeedbackIcon: {
     width: 36,
     height: 36,
@@ -277,4 +269,5 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: 22,
   },
+  adviceSource: { ...typography.xs, color: colors.textMuted, marginTop: spacing.sm },
 });

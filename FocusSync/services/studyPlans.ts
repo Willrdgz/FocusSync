@@ -63,23 +63,6 @@ const getEdgeFunctionErrorMessage = async (error: unknown) => {
   return fallback;
 };
 
-export interface HistoryFeedback {
-  recommendation: string | null;
-  generatedAt?: string;
-  empty?: boolean;
-}
-
-export const fetchHistoryFeedback = async (): Promise<HistoryFeedback> => {
-  const { data, error } = await supabase.functions.invoke<HistoryFeedback>('generate-study-plan', {
-    body: { action: 'feedback' },
-  });
-  if (error) throw new Error(await getEdgeFunctionErrorMessage(error));
-  if (!data || (!data.empty && typeof data.recommendation !== 'string')) {
-    throw new Error('No se pudo generar tu consejo. Inténtalo de nuevo.');
-  }
-  return data;
-};
-
 const normalizeStringArray = (value: unknown) => {
   if (!Array.isArray(value)) {
     return [];

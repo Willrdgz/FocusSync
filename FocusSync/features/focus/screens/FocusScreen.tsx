@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal as RNModal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useKeepAwake } from 'expo-keep-awake';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -17,7 +17,9 @@ import { useDeviceOrientation } from '../../../hooks/useDeviceOrientation';
 import { useFocusTimer } from '../../../hooks/useFocusTimer';
 import { useCompletionAlarm } from '../../../hooks/useCompletionAlarm';
 import { isExpoGo, prepareCompletionNotification } from '../../../services/completionNotification';
-import { cancelFocusSession, completeFocusSession, createFocusSession, recordDistraction, resumeFocusSession } from '../../../services/studyPlans';
+import { cancelFocusSession, completeFocusSession, createFocusSession, fetchStudyPlanById, recordDistraction, resumeFocusSession } from '../../../services/studyPlans';
+
+import { StudyPlanBlock } from '../../../types';
 
 function KeepTimerAwake() {
   useKeepAwake();
@@ -25,16 +27,26 @@ function KeepTimerAwake() {
 }
 
 export default function FocusScreen() {
-  const { planId, blockId, durationMinutes } = useLocalSearchParams<{
+  const { planId, blockId: routeBlockId, durationMinutes } = useLocalSearchParams<{
     planId?: string;
     blockId?: string;
     durationMinutes?: string;
   }>();
+  const [blockId, setBlockId] = useState(routeBlockId);
+  const [blocks, setBlocks] = useState<StudyPlanBlock[]>([]);
+  const [loadingPlan, setLoadingPlan] = useState(Boolean(planId));
+  const [planError, setPlanError] = useState(false);
+  const [planRetry, setPlanRetry] = useState(0);
+  const [continuePending, setContinuePending] = useState(false);
   const [manualMinutes, setManualMinutes] = useState('25');
   const [manualMode, setManualMode] = useState(false);
   const fromBlock = Boolean(blockId) && !manualMode;
+  const blockIndex = blocks.findIndex((block) => block.id === blockId);
+  const currentBlock = fromBlock ? blocks[blockIndex] : undefined;
+  const nextBlock = fromBlock && blockIndex >= 0 ? blocks[blockIndex + 1] : undefined;
+  const isRest = currentBlock?.type === 'descanso';
   const validManualMinutes = /^\d+$/.test(manualMinutes) && Number(manualMinutes) >= 1 && Number(manualMinutes) <= 180;
-  const plannedMinutes = fromBlock ? (Number(durationMinutes) > 0 ? Number(durationMinutes) : 25) : Number(manualMinutes);
+  const plannedMinutes = fromBlock ? (currentBlock?.durationMinutes ?? (Number(durationMinutes) > 0 ? Number(durationMinutes) : 25)) : Number(manualMinutes);
   const initialDuration = plannedMinutes * 60;
   const {
     timeRemaining,
@@ -59,26 +71,50 @@ export default function FocusScreen() {
   const [savingSession, setSavingSession] = useState(false);
   const [pendingResumeSync, setPendingResumeSync] = useState(false);
   const distractionHandled = useRef(false);
+  const [interruptionCount, setInterruptionCount] = useState(0);
+  const [planInterruptionCount, setPlanInterruptionCount] = useState(0);
   const completionHandled = useRef(false);
   const sessionMinutes = useRef(plannedMinutes);
   const [completionError, setCompletionError] = useState(false);
   const [preparingAlarm, setPreparingAlarm] = useState(false);
   const [alarmPermissionWarning, setAlarmPermissionWarning] = useState<string | null>(null);
 
-  useEffect(() => { setManualMode(false); }, [blockId, planId, durationMinutes]);
+  const completedRef = useRef(isCompleted);
+  completedRef.current = isCompleted;
+  useEffect(() => {
+    setManualMode(false);
+    setBlockId(routeBlockId);
+    setBlocks([]);
+    setPlanInterruptionCount(0);
+    setContinuePending(false);
+    setPlanError(false);
+    if (!planId || !routeBlockId) { setLoadingPlan(false); return; }
+    let active = true;
+    setLoadingPlan(true);
+    fetchStudyPlanById(planId).then((plan) => {
+      if (!active) return;
+      if (!plan.blocks.some((block) => block.id === routeBlockId)) throw new Error('Bloque no encontrado');
+      setBlocks(plan.blocks);
+    }).catch(() => { if (active) setPlanError(true); })
+      .finally(() => { if (active) setLoadingPlan(false); });
+    return () => { active = false; };
+    // Retry reloads the same plan after a network failure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeBlockId, planId, durationMinutes, planRetry]);
 
   useEffect(() => {
     // Keep the completed session intact while the next duration is being edited.
-    if (isCompleted) return;
+    if (completedRef.current) return;
     prepareTimer(initialDuration);
+    setInterruptionCount(0);
     setSessionStarted(false);
     setFocusSessionId(null);
     completionHandled.current = false;
     setCompletionError(false);
-  }, [blockId, initialDuration, planId, prepareTimer, isCompleted]);
+  }, [blockId, initialDuration, planId, prepareTimer]);
 
   useEffect(() => {
-    if (!waitingForFaceDown || !sensors.isFaceDown) return;
+    if (!waitingForFaceDown || (!isRest && !sensors.isFaceDown)) return;
 
     activateTimer();
     distractionHandled.current = false;
@@ -98,12 +134,14 @@ export default function FocusScreen() {
         resumeFocusSession(focusSessionId).catch(() => undefined);
       }
     }
-  }, [activateTimer, blockId, focusSessionId, fromBlock, pendingResumeSync, planId, plannedMinutes, sensors.isFaceDown, sessionStarted, waitingForFaceDown]);
+  }, [activateTimer, blockId, focusSessionId, fromBlock, isRest, pendingResumeSync, planId, plannedMinutes, sensors.isFaceDown, sessionStarted, waitingForFaceDown]);
 
   useEffect(() => {
-    if (!sessionStarted || !isRunning || isPaused || sensors.isFaceDown || distractionHandled.current) return;
+    if (isRest || !sessionStarted || !isRunning || isPaused || sensors.isFaceDown || distractionHandled.current) return;
 
     distractionHandled.current = true;
+    setInterruptionCount((count) => count + 1);
+    if (fromBlock) setPlanInterruptionCount((count) => count + 1);
     simulateDistraction();
 
     if (focusSessionId) {
@@ -117,7 +155,7 @@ export default function FocusScreen() {
         },
       }).catch(() => undefined);
     }
-  }, [focusSessionId, initialDuration, isPaused, isRunning, sensors.isFaceDown, sensors.isMoving, sensors.snapshot, sessionStarted, simulateDistraction, timeRemaining]);
+  }, [focusSessionId, fromBlock, initialDuration, isRest, isPaused, isRunning, sensors.isFaceDown, sensors.isMoving, sensors.snapshot, sessionStarted, simulateDistraction, timeRemaining]);
 
   useEffect(() => {
     if (!isCompleted || !focusSessionId || completionHandled.current) return;
@@ -130,7 +168,7 @@ export default function FocusScreen() {
 
   const requestStart = async () => {
     if (!fromBlock && !validManualMinutes) return;
-    if (preparingAlarm) return;
+    if (preparingAlarm || (fromBlock && (loadingPlan || planError))) return;
     sessionMinutes.current = plannedMinutes;
     setPreparingAlarm(true);
     try {
@@ -151,6 +189,8 @@ export default function FocusScreen() {
     silence();
     setManualMode(true);
     prepareTimer(Number(manualMinutes) * 60);
+    setInterruptionCount(0);
+    setPlanInterruptionCount(0);
     setSessionStarted(false);
     setFocusSessionId(null);
     setPendingResumeSync(false);
@@ -160,6 +200,29 @@ export default function FocusScreen() {
     setAlarmPermissionWarning(null);
     router.setParams({ planId: undefined, blockId: undefined, durationMinutes: undefined });
   };
+
+  const finishBlock = () => {
+    if (savingSession || completionError || continuePending) return;
+    if (!nextBlock) { resetSession(); return; }
+    silence();
+    setSessionStarted(false);
+    setFocusSessionId(null);
+    setPendingResumeSync(false);
+    completionHandled.current = false;
+    distractionHandled.current = false;
+    setCompletionError(false);
+    prepareTimer(nextBlock.durationMinutes * 60);
+    setInterruptionCount(0);
+    setBlockId(nextBlock.id);
+    setContinuePending(true);
+  };
+
+  useEffect(() => {
+    if (!continuePending) return;
+    sessionMinutes.current = plannedMinutes;
+    startTimer(initialDuration);
+    setContinuePending(false);
+  }, [continuePending, initialDuration, plannedMinutes, startTimer]);
 
   const requestResume = () => {
     setPendingResumeSync(true);
@@ -191,6 +254,8 @@ export default function FocusScreen() {
           : isRunning && !isPaused && sensors.isFaceDown
             ? 'Boca abajo · cronómetro activo'
             : 'Sensores preparados';
+  const isPlanFinished = fromBlock && !nextBlock;
+  const displayedInterruptions = isPlanFinished ? planInterruptionCount : interruptionCount;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -201,13 +266,16 @@ export default function FocusScreen() {
         </TouchableOpacity>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle}>Modo Enfoque</Text>
-          <Text style={styles.blockDuration}>{fromBlock && !isCompleted ? 'Bloque cargado' : 'Sesión manual'}: {isCompleted ? manualMinutes : plannedMinutes} min</Text>
+          <Text style={styles.blockDuration}>{fromBlock ? (currentBlock ? `Bloque ${blockIndex + 1} de ${blocks.length}` : 'Plan de estudio') : 'Sesión manual'}: {plannedMinutes} min</Text>
         </View>
         <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        {((!sessionStarted && !waitingForFaceDown) || isCompleted) && (
+        {fromBlock && loadingPlan && <Text style={styles.syncText}>Cargando bloques del plan...</Text>}
+        {fromBlock && planError && <Button title="Reintentar cargar plan" onPress={() => setPlanRetry((value) => value + 1)} />}
+        {currentBlock && <Text style={styles.distractionMessage}>{isRest ? 'Descanso' : currentBlock.title}</Text>}
+        {!sessionStarted && !waitingForFaceDown && (
           <View style={styles.manualSettings}>
             {fromBlock && !isCompleted ? <Button title="Configurar sesión manual" variant="secondary" onPress={() => setManualMode(true)} /> : <>
               <Text style={styles.distractionMessage}>Configura tu tiempo</Text>
@@ -219,17 +287,17 @@ export default function FocusScreen() {
         {!isCompleted && (fromBlock || sessionStarted || waitingForFaceDown) && <TimerDisplay timeRemaining={timeRemaining} style={distractionDetected && styles.timerAlert} />}
 
         <InstructionText
-          visible={waitingForFaceDown || (isRunning && !isPaused)}
+          visible={!isRest && (waitingForFaceDown || (isRunning && !isPaused))}
           text={waitingForFaceDown
             ? 'Coloca el teléfono boca abajo. El cronómetro comenzará cuando la posición sea estable.'
             : 'Mantén el teléfono boca abajo. Si lo levantas, la sesión se pausará automáticamente.'}
         />
 
-        <View style={styles.sensorContainer}>
+        {isRest ? <Text style={styles.syncText}>Puedes levantar el teléfono durante el descanso.</Text> : <View style={styles.sensorContainer}>
           <SensorBadge active={sensors.available === true && !distractionDetected} label={sensorLabel} />
           {sensors.isMoving && sensors.available && <Text style={styles.movementText}>Movimiento detectado por el giroscopio</Text>}
           {sensors.error && <Text style={styles.sensorError}>{sensors.error}</Text>}
-        </View>
+        </View>}
 
         {savingSession && <Text style={styles.syncText}>Guardando sesión en Supabase...</Text>}
         {alarmPermissionWarning && <Text style={styles.sensorError}>{alarmPermissionWarning}</Text>}
@@ -248,7 +316,7 @@ export default function FocusScreen() {
         {!distractionDetected && !isCompleted && (
           <View style={styles.buttonContainer}>
             {!sessionStarted && !waitingForFaceDown && (
-              <Button title={preparingAlarm ? 'Preparando...' : 'Iniciar'} onPress={requestStart} disabled={preparingAlarm || sensors.available !== true || (!fromBlock && !validManualMinutes)} style={styles.controlButton} leftIcon={<Ionicons name="play" size={20} color={colors.white} />} />
+              <Button title={preparingAlarm ? 'Preparando...' : 'Iniciar'} onPress={requestStart} disabled={continuePending || preparingAlarm || (fromBlock && (loadingPlan || planError)) || (!isRest && sensors.available !== true) || (!fromBlock && !validManualMinutes)} style={styles.controlButton} leftIcon={<Ionicons name="play" size={20} color={colors.white} />} />
             )}
             {waitingForFaceDown && <Button title="Esperando posición..." onPress={() => undefined} disabled style={styles.controlButton} />}
             {isRunning && !isPaused && (
@@ -260,16 +328,40 @@ export default function FocusScreen() {
           </View>
         )}
 
-        {isCompleted && <Card style={styles.manualSettings}>
-          <Text style={[styles.distractionTitle, { color: colors.primary }]}>¡Sesión completada!</Text>
-          <Text style={styles.distractionMessage}>Completaste {sessionMinutes.current} minutos de enfoque.</Text>
-          {completionError && <Text style={styles.sensorError}>No se pudo guardar la finalización.</Text>}
-          {completionError && focusSessionId && <Button title="Reintentar guardar" onPress={() => { void completeFocusSession(focusSessionId, sessionMinutes.current).then(() => setCompletionError(false)).catch(() => setCompletionError(true)); }} />}
-          <Button title="Finalizar" onPress={resetSession} disabled={savingSession || completionError} />
-          <Button title="Restablecer" variant="secondary" onPress={resetSession} disabled={savingSession || completionError} />
-        </Card>}
         {sessionStarted && !isCompleted && <Button variant="danger" title="Terminar sesión" onPress={() => setShowGiveUpModal(true)} style={styles.fullButton} />}
       </ScrollView>
+
+      <RNModal visible={isCompleted} transparent statusBarTranslucent animationType="fade" presentationStyle="overFullScreen" onRequestClose={() => undefined}>
+        <SafeAreaView style={styles.completionOverlay}>
+          <View style={styles.completionPopup}>
+            <View style={styles.completionGlow}>
+              <Ionicons name={isPlanFinished ? 'trophy' : isRest ? 'cafe' : 'checkmark-circle'} size={64} color={isPlanFinished ? colors.warning : colors.primary} />
+            </View>
+            <Text style={styles.completionEyebrow}>{isPlanFinished ? 'PLAN COMPLETADO' : isRest ? 'DESCANSO COMPLETADO' : fromBlock ? 'BLOQUE COMPLETADO' : 'SESIÓN MANUAL COMPLETADA'}</Text>
+            <Text style={styles.completionTitle}>{isPlanFinished
+              ? '¡Felicidades! Terminaste todo tu estudio.'
+              : isRest
+                ? '¡Descanso completado!'
+                : '¡Felicidades! Completaste tu bloque de estudio.'}</Text>
+            <Text style={styles.completionMessage}>{isPlanFinished
+              ? `Completaste ${blocks.filter((block) => block.type !== 'descanso').length} bloques de enfoque y ${blocks.reduce((total, block) => total + block.durationMinutes, 0)} minutos del plan.`
+              : `Completaste ${sessionMinutes.current} minutos de ${isRest ? 'descanso' : 'enfoque'}.`}</Text>
+            {!isRest && <Text style={styles.completionMessage}>{displayedInterruptions === 0
+              ? `No se detectaron interrupciones. ${isPlanFinished ? '¡Tu concentración fue excelente!' : '¡Excelente concentración!'}`
+              : isPlanFinished
+                ? `Se ${displayedInterruptions === 1 ? 'detectó 1 interrupción' : `detectaron ${displayedInterruptions} interrupciones`}, pero retomaste el plan y cumpliste tu objetivo. ¡Buen trabajo!`
+                : `Se ${displayedInterruptions === 1 ? 'detectó 1 interrupción' : `detectaron ${displayedInterruptions} interrupciones`}, pero retomaste y completaste tu objetivo. ¡Buen trabajo!`}</Text>}
+            {savingSession && <Text style={styles.syncText}>Guardando sesión en Supabase...</Text>}
+            {completionError && <Text style={styles.sensorError}>No se pudo guardar la finalización.</Text>}
+            {completionError && focusSessionId && <Button title="Reintentar guardar" onPress={() => { void completeFocusSession(focusSessionId, sessionMinutes.current).then(() => setCompletionError(false)).catch(() => setCompletionError(true)); }} />}
+            {nextBlock && <Text style={styles.nextBlockText}>Siguiente: {nextBlock.title} ({nextBlock.durationMinutes} min)</Text>}
+            <View style={styles.completionActions}>
+              <Button title={nextBlock ? (nextBlock.type === 'descanso' ? 'Continuar con descanso' : 'Continuar con siguiente bloque') : 'Finalizar'} onPress={finishBlock} disabled={continuePending || savingSession || completionError} style={styles.fullButton} />
+              <Button title={nextBlock ? 'Salir del plan y configurar manual' : 'Restablecer'} variant="secondary" onPress={resetSession} disabled={savingSession || completionError} style={styles.fullButton} />
+            </View>
+          </View>
+        </SafeAreaView>
+      </RNModal>
 
       <Modal visible={showGiveUpModal} title="¿Terminar sesión?" message="Se guardará el tiempo estudiado hasta este momento." onConfirm={confirmGiveUp} onCancel={() => setShowGiveUpModal(false)} confirmText="Terminar" cancelText="Continuar" danger />
     </SafeAreaView>
@@ -297,4 +389,12 @@ const styles = StyleSheet.create({
   distractionCard: { width: '100%', alignItems: 'center', borderWidth: 2, borderColor: colors.danger, backgroundColor: colors.danger + '12', gap: spacing.md, borderRadius: borderRadius.lg },
   distractionTitle: { ...typography.xl, fontWeight: fontWeights.bold, color: colors.danger, textAlign: 'center' },
   distractionMessage: { ...typography.md, color: colors.textPrimary, textAlign: 'center', lineHeight: 24 },
+  completionOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.96)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  completionPopup: { width: '100%', maxWidth: 440, backgroundColor: colors.surface, borderRadius: borderRadius.xl, borderWidth: 2, borderColor: colors.primary, padding: spacing.xl, alignItems: 'center', gap: spacing.md, elevation: 24 },
+  completionGlow: { width: 112, height: 112, borderRadius: 56, backgroundColor: colors.primary + '20', alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.primary + '55' },
+  completionEyebrow: { ...typography.sm, color: colors.warning, fontWeight: fontWeights.bold, letterSpacing: 2 },
+  completionTitle: { ...typography['3xl'], color: colors.textPrimary, fontWeight: fontWeights.bold, textAlign: 'center' },
+  completionMessage: { ...typography.lg, color: colors.textSecondary, textAlign: 'center', lineHeight: 28, maxWidth: 420 },
+  nextBlockText: { ...typography.md, color: colors.textPrimary, fontWeight: fontWeights.semibold, textAlign: 'center', marginTop: spacing.sm },
+  completionActions: { width: '100%', maxWidth: 420, gap: spacing.md, marginTop: spacing.md },
 });
